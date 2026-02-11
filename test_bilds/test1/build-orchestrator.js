@@ -25,20 +25,14 @@
     return state.knownLevel > 0 ? (state.knownLevel + 1) : 1;
   }
 
-  function buildFullUrl(isPreload) {
-    const separator = state.manifest.full.url.includes('?') ? '&' : '?';
-    const params = new URLSearchParams({ mode: 'full' });
-
-    if (isPreload) {
-      params.set('preload', '1');
-    }
-
-    params.set('resumeLevel', String(getResumeLevel()));
-
-    return `${state.manifest.full.url}${separator}${params.toString()}`;
+  function persistHandoverLevel() {
+    localStorage.setItem('handover:resume-level', String(getResumeLevel()));
+    localStorage.setItem('handover:known-lite-level', String(state.knownLevel));
   }
 
   function sendHandoverStateToFull(reason) {
+    persistHandoverLevel();
+
     if (!fullFrame.contentWindow) {
       return;
     }
@@ -141,7 +135,7 @@
     state.preloadQueued = false;
     state.preloadQueueReason = null;
 
-    fullFrame.src = buildFullUrl(true);
+    fullFrame.src = `${state.manifest.full.url}${state.manifest.full.url.includes('?') ? '&' : '?'}mode=full&preload=1`;
     console.log('[orchestrator] full preload started:', reason);
   }
 
@@ -247,6 +241,7 @@
 
     if (msg.type === 'level-reached' && msg.buildId === 'lite') {
       state.knownLevel = Number(msg.level) || 0;
+      persistHandoverLevel();
       if (state.preloadStarted) {
         sendHandoverStateToFull('lite-level-update');
       }
@@ -286,6 +281,7 @@
     liteFrame.src = `${state.manifest.lite.url}${state.manifest.lite.url.includes('?') ? '&' : '?'}mode=lite`;
 
     activate('lite');
+    persistHandoverLevel();
 
     const delay = Number(state.manifest.preload?.triggerDelayMs || 14000);
     state.preloadArmTimer = window.setTimeout(() => {

@@ -65,10 +65,36 @@
       const isPreloadMode = runtimeParams.get('preload') === '1';
 
       const handoverState = {
-        resumeLevel: Number(runtimeParams.get('resumeLevel')) || 1,
-        knownLiteLevel: Math.max((Number(runtimeParams.get('resumeLevel')) || 1) - 1, 0),
-        reason: 'initial-url'
+        resumeLevel: Number(localStorage.getItem('handover:resume-level')) || 1,
+        knownLiteLevel: Number(localStorage.getItem('handover:known-lite-level')) || 0,
+        reason: 'bootstrap'
       };
+
+      function applyHandoverToUnity() {
+        if (!window.unityInstance || !handoverState.resumeLevel) {
+          return;
+        }
+
+        const payload = String(handoverState.resumeLevel);
+        const variants = [
+          ['GameManager', 'SetStartLevel'],
+          ['GameManager', 'SetResumeLevel'],
+          ['GameManager', 'ResumeFromLevel'],
+          ['Bootstrap', 'SetStartLevel'],
+          ['Bootstrap', 'ResumeFromLevel'],
+          ['Bridge', 'SetResumeLevel']
+        ];
+
+        for (const [objectName, methodName] of variants) {
+          try {
+            window.unityInstance.SendMessage(objectName, methodName, payload);
+            console.log('[handover] resume level sent', objectName, methodName, payload);
+            return;
+          } catch (error) {
+            // Try next bridge signature silently
+          }
+        }
+      }
 
       function setHandoverState(nextState) {
         if (!nextState || typeof nextState !== 'object') {
@@ -78,7 +104,6 @@
         const incomingResume = Number(nextState.resumeLevel);
         if (incomingResume > 0) {
           handoverState.resumeLevel = incomingResume;
-          handoverState.knownLiteLevel = Math.max(incomingResume - 1, 0);
         }
 
         const incomingKnown = Number(nextState.knownLiteLevel);
@@ -90,6 +115,8 @@
 
         localStorage.setItem('handover:resume-level', String(handoverState.resumeLevel));
         localStorage.setItem('handover:known-lite-level', String(handoverState.knownLiteLevel));
+
+        applyHandoverToUnity();
       }
 
       window.__CM_HandoverState = handoverState;
@@ -179,7 +206,7 @@
           progressBarFull.style.width = 100 * progress + "%";
         }).then((unityInstance) => {
           window.unityInstance = unityInstance;
-          setHandoverState(handoverState);
+          applyHandoverToUnity();
           loadingBar.style.display = "none";
           if (window.parent && window.parent !== window) {
             const mode = new URLSearchParams(window.location.search).get('mode') === 'full' ? 'full' : 'lite';
