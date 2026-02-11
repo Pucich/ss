@@ -1,28 +1,34 @@
 # Lite → Full build switch (Unity WebGL shell)
 
-Реализован независимый от Unity слой управления загрузкой:
+Реализован независимый JS/HTML слой для последовательной загрузки:
 
-- первый запуск: `lite` билд;
-- фоновой прогрев `full` на уровне 3-4 (через `window.GameLevelReached(level)`) или по таймеру;
-- при вызове `window.GameOver()` выполняется переключение в `full`;
-- если `full` уже прогрет — переключение без экрана загрузки;
-- если `full` не готов — показывается overlay загрузки;
-- последующие запуски открывают `full` сразу при совпадении версии из манифеста.
+- старт всегда с `lite`;
+- `full` начинает прогреваться в фоне с 3 уровня (`window.GameLevelReached(level)`) или по fallback-таймеру;
+- на 6 уровне (или по `window.GameOver()`) идёт переход в `full`;
+- если `full` уже готов, переход без паузы;
+- если есть задержка — остаётся текущее изображение игры + маленький CSS-спиннер в правом нижнем углу (без прогресс-бара);
+- состояние готовности full кэшируется по версии из манифеста.
 
 ## Файлы
 
-- `builds-manifest.json` — версия и URL lite/full билдов.
-- `build-orchestrator.js` — state machine, preloading, переключение.
-- `index.html` — двухконтейнерный shell и overlay.
+- `builds-manifest.json` — **единая точка настройки**: версии, директории, имена ассетов, уровни и тайминги переключения.
+- `build-orchestrator.js` — state machine: запуск lite, фоновый warmup full, handover без миганий.
+- `index.html` — shell с двумя canvas и overlay-спиннером.
 
-## Интеграция в текущий хостинг
+## Что можно менять без правок кода
 
-1. Подставьте реальные пути в `builds-manifest.json`.
-2. Оставьте ваш существующий progress bar и его callback; в orchestrator можно подключить ваш рендер прогресса внутри `updateOverlayProgress`.
-3. Убедитесь, что lite билд вызывает `window.GameOver()` на 6 уровне (как уже реализовано у вас).
-4. Если есть сигнал номера уровня из JS, прокиньте его в `window.GameLevelReached(level)`.
+В `builds-manifest.json`:
 
-## Версионирование full билда
+- директории билдов (`baseDir`);
+- имена файлов (`loader/data/framework/wasm`);
+- версии (`version`);
+- момент старта прогрева/переключения (`warmupStartLevel`, `switchLevel`);
+- ограничение ожидания handover (`maxHandoverWaitMs`, целевое ~14с).
 
-При смене версии `full.version` в манифесте старый флаг готовности автоматически сбрасывается,
-и новый full прогревается заново.
+## Интеграция в текущий проект
+
+1. Проставить реальные пути к lite/full в `builds-manifest.json`.
+2. Сохранить ваш текущий progress bar как есть — orchestrator его не меняет.
+3. Убедиться, что игра вызывает:
+   - `window.GameLevelReached(level)` на смене уровней;
+   - `window.GameOver()` как запасной триггер перехода.
