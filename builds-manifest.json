@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "activeTrack": {
+    "lite": "lite",
+    "full": "full"
+  },
+  "builds": {
+    "lite": {
+      "version": "1.0.0",
+      "baseDir": "Builds/Lite",
+      "loader": "Build/Lite.loader.js",
+      "data": "Build/Lite.data",
+      "framework": "Build/Lite.framework.js",
+      "wasm": "Build/Lite.wasm"
+    },
+    "full": {
+      "version": "1.0.0",
+      "baseDir": "Builds/Full",
+      "loader": "Build/Full.loader.js",
+      "data": "Build/Full.data",
+      "framework": "Build/Full.framework.js",
+      "wasm": "Build/Full.wasm"
+    }
+  },
+  "switching": {
+    "switchLevel": 6,
+    "warmupStartLevel": 3,
+    "warmupFallbackDelayMs": 8000,
+    "maxHandoverWaitMs": 14000,
+    "pollIntervalMs": 120
+  }
+}
