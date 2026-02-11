@@ -4,6 +4,10 @@
   const state = {
     manifest: null,
     preloadStarted: false,
+    preloadQueued: false,
+    preloadQueueReason: null,
+    preloadArmTimer: null,
+    preloadRetryTimer: null,
     fullReady: false,
     active: 'lite',
     handoverRequested: false,
@@ -91,10 +95,68 @@
     if (state.preloadStarted) {
       return;
     }
+
+    if (state.preloadArmTimer) {
+      clearTimeout(state.preloadArmTimer);
+      state.preloadArmTimer = null;
+    }
+
+    if (state.preloadRetryTimer) {
+      clearTimeout(state.preloadRetryTimer);
+      state.preloadRetryTimer = null;
+    }
+
     state.preloadStarted = true;
+    state.preloadQueued = false;
+    state.preloadQueueReason = null;
 
     fullFrame.src = `${state.manifest.full.url}${state.manifest.full.url.includes('?') ? '&' : '?'}mode=full&preload=1`;
     console.log('[orchestrator] full preload started:', reason);
+  }
+
+  function queueFullPreload(reason) {
+    if (state.preloadStarted || state.preloadQueued) {
+      return;
+    }
+
+    state.preloadQueued = true;
+    state.preloadQueueReason = reason;
+    console.log('[orchestrator] full preload queued:', reason);
+  }
+
+  function runPreloadWhenSafe() {
+    if (!state.preloadQueued || state.preloadStarted) {
+      return;
+    }
+
+    const queuedReason = state.preloadQueueReason || 'safe-moment';
+
+    if (document.visibilityState === 'hidden') {
+      startFullPreload(`${queuedReason}:hidden-tab`);
+      return;
+    }
+
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback((deadline) => {
+        if (!state.preloadQueued || state.preloadStarted) {
+          return;
+        }
+
+        const isSafeNow = deadline.didTimeout || deadline.timeRemaining() >= 12;
+
+        if (isSafeNow) {
+          startFullPreload(`${queuedReason}:idle`);
+          return;
+        }
+
+        state.preloadRetryTimer = window.setTimeout(runPreloadWhenSafe, 1200);
+      }, { timeout: 4500 });
+      return;
+    }
+
+    state.preloadRetryTimer = window.setTimeout(() => {
+      startFullPreload(`${queuedReason}:fallback`);
+    }, 3000);
   }
 
   function requestSwitchToFull(reason) {
@@ -153,7 +215,8 @@
     if (msg.type === 'level-reached' && msg.buildId === 'lite') {
       state.knownLevel = Number(msg.level) || 0;
       if (state.knownLevel >= 3) {
-        startFullPreload('level-trigger');
+        queueFullPreload('level-trigger');
+        runPreloadWhenSafe();
       }
     }
   }
@@ -188,7 +251,10 @@
     activate('lite');
 
     const delay = Number(state.manifest.preload?.triggerDelayMs || 14000);
-    setTimeout(() => startFullPreload('time-trigger'), delay);
+    state.preloadArmTimer = window.setTimeout(() => {
+      queueFullPreload('armed-timer');
+      runPreloadWhenSafe();
+    }, delay);
   }
 
   bootstrap();

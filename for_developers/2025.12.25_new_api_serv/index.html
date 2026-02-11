@@ -61,8 +61,11 @@
         }
       };
 
+      const runtimeParams = new URLSearchParams(window.location.search);
+      const isPreloadMode = runtimeParams.get('preload') === '1';
+
       window.addEventListener("load", function () {
-        if ("serviceWorker" in navigator) {
+        if ("serviceWorker" in navigator && !isPreloadMode) {
           navigator.serviceWorker.register("ServiceWorker.js");
         }
       });
