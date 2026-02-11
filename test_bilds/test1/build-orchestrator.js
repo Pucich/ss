@@ -4,6 +4,8 @@
   const PRELOAD_LEVEL_FORCE = 5;
   const SWITCH_GRACE_EXTRA_MS = 6000;
   const ACTIVE_BUILD_SESSION_KEY = 'handover:active-build-session';
+  const ACTIVE_BUILD_LOCAL_KEY = 'handover:active-build-local';
+  const ACTIVE_BUILD_LOCAL_TTL_MS = 15 * 60 * 1000;
 
   const state = {
     manifest: null,
@@ -19,7 +21,9 @@
     handoverRequested: false,
     switchStartedAt: 0,
     fallbackTimer: null,
-    knownLevel: 0
+    knownLevel: 0,
+    fullPreloadToken: 0,
+    activeFullPreloadToken: 0
   };
 
   const stage = document.getElementById('build-stage');
@@ -109,6 +113,15 @@
     sessionFallback[key] = String(value);
   }
 
+  function safeSessionRemove(key) {
+    try {
+      sessionStorage.removeItem(key);
+    } catch (error) {
+      // Ignore sessionStorage unavailability and use in-memory fallback.
+    }
+    delete sessionFallback[key];
+  }
+
   function getResumeLevel() {
     return state.knownLevel > 0 ? (state.knownLevel + 1) : 1;
   }
@@ -133,7 +146,8 @@
       buildId: 'full',
       reason,
       resumeLevel: getResumeLevel(),
-      knownLiteLevel: state.knownLevel
+      knownLiteLevel: state.knownLevel,
+      preloadToken: state.activeFullPreloadToken || 0
     });
   }
 
@@ -161,21 +175,24 @@
     fullFrame.classList.toggle('is-warm', isLite);
     state.active = frameKey;
     safeSessionSet(ACTIVE_BUILD_SESSION_KEY, frameKey);
+    safeStorageSet(ACTIVE_BUILD_LOCAL_KEY, JSON.stringify({
+      frameKey,
+      timestamp: Date.now()
+    }));
   }
 
-  function markFullReady() {
-    if (state.fullReady) {
-      return;
+  function markFullReady(reason) {
+    if (!state.fullReady) {
+      state.fullReady = true;
     }
 
-    state.fullReady = true;
     const cacheKey = getFullReadyKey();
     if (cacheKey) {
       safeStorageSet(cacheKey, '1');
     }
 
-    if (state.handoverRequested) {
-      completeSwitch('build-ready');
+    if (state.handoverRequested && state.active !== 'full') {
+      completeSwitch(reason || 'build-ready');
     }
   }
 
@@ -231,10 +248,12 @@
     state.preloadStarted = true;
     state.preloadQueued = false;
     state.preloadQueueReason = null;
+    state.fullPreloadToken += 1;
+    state.activeFullPreloadToken = state.fullPreloadToken;
 
-    fullFrame.src = `${state.manifest.full.url}${state.manifest.full.url.includes('?') ? '&' : '?'}mode=full&preload=1`;
+    fullFrame.src = `${state.manifest.full.url}${state.manifest.full.url.includes('?') ? '&' : '?'}mode=full&preload=1&handoverToken=${state.activeFullPreloadToken}`;
     sendHandoverStateToFull(`preload-start:${reason}`);
-    console.log('[orchestrator] full preload started:', reason);
+    console.log('[orchestrator] full preload started:', reason, 'token=', state.activeFullPreloadToken);
   }
 
   function scheduleForcedPreloadStart() {
@@ -317,7 +336,35 @@
   }
 
   function shouldRestoreFullAfterReload() {
-    return safeSessionGet(ACTIVE_BUILD_SESSION_KEY) === 'full';
+    const sessionValue = safeSessionGet(ACTIVE_BUILD_SESSION_KEY);
+    if (sessionValue) {
+      const fromSession = sessionValue === 'full';
+      console.log('[orchestrator] restore-on-reload decision:', fromSession, 'source=session');
+      return fromSession;
+    }
+
+    const localValue = safeStorageGet(ACTIVE_BUILD_LOCAL_KEY);
+    if (!localValue) {
+      console.log('[orchestrator] restore-on-reload decision: false source=none');
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(localValue);
+      const ageMs = Date.now() - Number(parsed.timestamp || 0);
+      if (ageMs <= ACTIVE_BUILD_LOCAL_TTL_MS) {
+        const fromLocal = parsed.frameKey === 'full';
+        console.log('[orchestrator] restore-on-reload decision:', fromLocal, 'source=local ageMs=', ageMs);
+        return fromLocal;
+      }
+    } catch (error) {
+      console.warn('[orchestrator] invalid local restore state', error);
+    }
+
+    safeStorageRemove(ACTIVE_BUILD_LOCAL_KEY);
+    safeSessionRemove(ACTIVE_BUILD_SESSION_KEY);
+    console.log('[orchestrator] restore-on-reload decision: false source=expired');
+    return false;
   }
 
   function requestSwitchToFull(reason) {
@@ -330,11 +377,6 @@
     startFullPreload(`switch:${reason}`);
     sendHandoverStateToFull(`switch:${reason}`);
     sendMessageToFull({ type: 'handover-activate', buildId: 'full' });
-
-    if (state.fullReady) {
-      completeSwitch('already-ready');
-      return;
-    }
 
     showOverlay();
     const maxWait = Number(state.manifest.preload?.fallbackSwitchTimeoutMs || 15000);
@@ -376,15 +418,35 @@
     const msg = event.data;
 
     if (msg.type === 'build-ready' && msg.buildId === 'full') {
+      const incomingToken = Number(msg.preloadToken) || 0;
+      if (state.activeFullPreloadToken > 0 && incomingToken > 0 && incomingToken !== state.activeFullPreloadToken) {
+        console.warn('[orchestrator] ignored stale build-ready token=', incomingToken, 'expected=', state.activeFullPreloadToken);
+        return;
+      }
+
+      if (state.activeFullPreloadToken > 0 && incomingToken === 0) {
+        console.warn('[orchestrator] build-ready without preload token; accepting for backward compatibility');
+      }
+
       sendHandoverStateToFull('full-build-ready');
-      markFullReady();
+      markFullReady('build-ready');
       return;
     }
 
     if (msg.type === 'game-over' && msg.buildId === 'lite') {
-      if (!canSwitchFromLiteNow()) {
-        console.log('[orchestrator] ignore lite game-over before required level; knownLevel=', state.knownLevel);
+      const requiredLevel = Number(state.manifest?.preload?.switchMinLiteLevel || 6);
+      const isLevelKnown = state.knownLevel > 0;
+      const canSwitch = canSwitchFromLiteNow();
+
+      if (!canSwitch && isLevelKnown) {
+        console.log('[orchestrator] ignore lite game-over before required level; knownLevel=', state.knownLevel, 'required=', requiredLevel);
         return;
+      }
+
+      if (!canSwitch && !isLevelKnown) {
+        console.log('[orchestrator] allow lite game-over switch without known level; required=', requiredLevel);
+      } else {
+        console.log('[orchestrator] allow lite game-over switch; knownLevel=', state.knownLevel, 'required=', requiredLevel);
       }
 
       requestSwitchToFull('game-over');

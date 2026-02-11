@@ -58,6 +58,7 @@
 
       const runtimeParams = new URLSearchParams(window.location.search);
       const isPreloadMode = runtimeParams.get('preload') === '1';
+      const currentPreloadToken = Number(runtimeParams.get('handoverToken')) || 0;
       let sdkLoaded = false;
       let handoverRetryTimer = null;
       let handoverRetryCount = 0;
@@ -297,7 +298,7 @@
           loadingBar.style.display = "none";
           if (window.parent && window.parent !== window) {
             const mode = new URLSearchParams(window.location.search).get('mode') === 'full' ? 'full' : 'lite';
-            window.parent.postMessage({ type: 'build-ready', buildId: mode }, window.location.origin);
+            window.parent.postMessage({ type: 'build-ready', buildId: mode, preloadToken: currentPreloadToken }, window.location.origin);
           }
         }).catch((message) => {
           alert(message);
