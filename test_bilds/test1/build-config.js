@@ -4,5 +4,6 @@
   window.CMP_BUILD_CONFIG = {
     liteUrl: '/2025.12.13_build_cut_SergeyZ/',
     fullUrl: '/prod_bilds/2025.12.25_new_api_serv/',
+    fullVersion: '2025.12.25_new_api_serv',
   };
 })();

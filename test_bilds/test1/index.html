@@ -28,8 +28,11 @@
         fullUrl: '/prod_bilds/2025.12.25_new_api_serv/',
       }, window.CMP_BUILD_CONFIG || {});
 
-      const fullBase = new URL(ROUTER.fullUrl).toString();
-      const readyKey = `cmp_full_ready:${fullBase}`;
+      let fullBase = '';
+
+      function normalizeUrl(url) {
+        return new URL(url, window.location.origin).toString();
+      }
 
       function safeCall(methodName, fn) {
         if (typeof fn !== 'function') return;
@@ -70,14 +73,38 @@
 
       function route() {
         const forceLite = new URLSearchParams(window.location.search).get('lite') === '1';
-        const ready = localStorage.getItem(readyKey) === '1';
+        const staleAfterMs = 7 * 24 * 60 * 60 * 1000;
 
-        if (!forceLite && ready) {
-          window.location.replace(ROUTER.fullUrl);
-          return;
+        try {
+          fullBase = normalizeUrl(ROUTER.fullUrl);
+          const liteBase = normalizeUrl(ROUTER.liteUrl);
+          const stateKey = `cmp_full_state:${fullBase}`;
+          const stateRaw = localStorage.getItem(stateKey);
+          const state = stateRaw ? JSON.parse(stateRaw) : null;
+          const targetVersion = ROUTER.fullVersion || 'unknown';
+          const stateReady = !!(
+            state &&
+            state.status === 'ready' &&
+            state.version === targetVersion &&
+            state.updatedAt &&
+            (Date.now() - state.updatedAt <= staleAfterMs)
+          );
+          const legacyReadyKey = `cmp_full_ready:${fullBase}`;
+          const legacyVersionKey = `cmp_full_version:${fullBase}`;
+          const legacyVersion = localStorage.getItem(legacyVersionKey);
+          const legacyReady = localStorage.getItem(legacyReadyKey) === '1' && (!legacyVersion || legacyVersion === targetVersion);
+          const isReady = stateReady || legacyReady;
+
+          if (!forceLite && isReady) {
+            window.location.replace(fullBase);
+            return;
+          }
+
+          window.location.replace(liteBase);
+        } catch (err) {
+          console.warn('[Router] Failed to resolve routes, fallback to lite', err);
+          window.location.replace(ROUTER.liteUrl);
         }
-
-        window.location.replace(ROUTER.liteUrl);
       }
 
       initTelegram();
