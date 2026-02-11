@@ -1,39 +1,72 @@
 <!DOCTYPE html>
-<html lang="en-us"> 
-	
-	<script src="https://telegram.org/js/telegram-web-app.js?57"></script>
-	
-	<script>
-		// Init TWA
-		Telegram.WebApp.ready();
-		
-		Telegram.WebApp.lockOrientation();	
-		
-		//Вопрос подтверждения закрытия
-		Telegram.WebApp.enableClosingConfirmation();
-		
-		const initData = Telegram.WebApp.initData;
-		const params = new URLSearchParams(initData);
-		const userData = params.get('user');
-		
-		if (userData) {
-			const user = JSON.parse(userData);
-			const userId = user.id;
-			console.log('User ID:', userId);
-			//alert(userId);
-			} else {
-			console.log('User data not available');
-			//alert("User data not available");
-		}
-		
-		Telegram.WebApp.requestFullscreen();
-		Telegram.WebApp.disableVerticalSwipes();
-		
-	</script>
-	
-	<script language="JavaScript"> 
-		window.location.href = "https://c-m-p.mooo.com/for_developers/2025.09.09_testLite_predprenimatel";
-	</script>
-	
+<html lang="en-us">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CMP Build Router</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0d0f16;
+      color: #fff;
+      font: 600 16px/1.4 Arial, sans-serif;
+    }
+  </style>
+  <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
+</head>
+<body>
+  <div>Подготавливаем игру…</div>
+
+  <script>
+    (function () {
+      const ROUTER = {
+        liteUrl: 'https://c-m-p.mooo.com/for_developers/2025.09.09_testLite_predprenimatel/',
+        fullUrl: 'https://c-m-p.mooo.com/prod_bilds/2025.12.25_new_api_serv/',
+      };
+
+      const fullBase = new URL(ROUTER.fullUrl).toString();
+      const readyKey = `cmp_full_ready:${fullBase}`;
+
+      function initTelegram() {
+        if (!window.Telegram || !Telegram.WebApp) return;
+
+        Telegram.WebApp.ready();
+        Telegram.WebApp.lockOrientation();
+        Telegram.WebApp.enableClosingConfirmation();
+
+        const initData = Telegram.WebApp.initData;
+        const params = new URLSearchParams(initData);
+        const userData = params.get('user');
+
+        if (userData) {
+          const user = JSON.parse(userData);
+          console.log('User ID:', user.id);
+        } else {
+          console.log('User data not available');
+        }
+
+        Telegram.WebApp.requestFullscreen();
+        Telegram.WebApp.disableVerticalSwipes();
+      }
+
+      function route() {
+        const forceLite = new URLSearchParams(window.location.search).get('lite') === '1';
+        const ready = localStorage.getItem(readyKey) === '1';
+
+        if (!forceLite && ready) {
+          window.location.replace(ROUTER.fullUrl);
+          return;
+        }
+
+        window.location.replace(ROUTER.liteUrl);
+      }
+
+      initTelegram();
+      route();
+    })();
+  </script>
 </body>
 </html>
