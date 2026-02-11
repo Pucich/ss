@@ -279,6 +279,12 @@
     }, 1800);
   }
 
+
+  function canSwitchFromLiteNow() {
+    const requiredLevel = Number(state.manifest?.preload?.switchMinLiteLevel || 6);
+    return state.knownLevel >= requiredLevel;
+  }
+
   function requestSwitchToFull(reason) {
     if (state.handoverRequested) {
       return;
@@ -341,6 +347,11 @@
     }
 
     if (msg.type === 'game-over' && msg.buildId === 'lite') {
+      if (!canSwitchFromLiteNow()) {
+        console.log('[orchestrator] ignore lite game-over before required level; knownLevel=', state.knownLevel);
+        return;
+      }
+
       requestSwitchToFull('game-over');
       return;
     }
