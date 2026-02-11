@@ -7,17 +7,21 @@
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
+    <script src="../test1/build-config.js"></script>
     <script>
       // Fallback bridge: Unity can call window.GameOver even if external loader script fails.
+      var buildCfg = window.CMP_BUILD_CONFIG || {};
+      var fullUrlFromConfig = buildCfg.fullUrl || '/prod_bilds/2025.12.25_new_api_serv/';
+
       window.SequentialLoaderConfig = {
-        fullBuildUrl: '/prod_bilds/2025.12.25_new_api_serv/',
+        fullBuildUrl: fullUrlFromConfig,
         prefetchDelayMs: 25000,
         prefetchTimeoutMs: 45000,
         overlayFadeMs: 220
       };
 
       window.__cmpSwitchToFull = function() {
-        var fullUrl = (window.SequentialLoaderConfig && window.SequentialLoaderConfig.fullBuildUrl) || '/prod_bilds/2025.12.25_new_api_serv/';
+        var fullUrl = (window.SequentialLoaderConfig && window.SequentialLoaderConfig.fullBuildUrl) || fullUrlFromConfig;
         window.location.replace(fullUrl);
       };
 

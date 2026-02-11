@@ -1,6 +1,6 @@
 (function () {
   const DEFAULTS = {
-    fullBuildUrl: '/prod_bilds/2025.12.25_new_api_serv/',
+    fullBuildUrl: (window.CMP_BUILD_CONFIG && window.CMP_BUILD_CONFIG.fullUrl) || '/prod_bilds/2025.12.25_new_api_serv/',
     prefetchDelayMs: 25000,
     prefetchTimeoutMs: 45000,
     prefetchConcurrency: 2,

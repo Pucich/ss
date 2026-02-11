@@ -15,6 +15,7 @@
       font: 600 16px/1.4 Arial, sans-serif;
     }
   </style>
+  <script src="./build-config.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
 </head>
 <body>
@@ -22,10 +23,10 @@
 
   <script>
     (function () {
-      const ROUTER = {
+      const ROUTER = Object.assign({
         liteUrl: '/2025.12.13_build_cut_SergeyZ/',
         fullUrl: 'https://c-m-p.mooo.com/prod_bilds/2025.12.25_new_api_serv/',
-      };
+      }, window.CMP_BUILD_CONFIG || {});
 
       const fullBase = new URL(ROUTER.fullUrl).toString();
       const readyKey = `cmp_full_ready:${fullBase}`;
