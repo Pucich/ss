@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en-us"> 
+	
+	<script src="https://telegram.org/js/telegram-web-app.js?57"></script>
+	
+	<script>
+		// Init TWA
+		Telegram.WebApp.ready();
+		
+		Telegram.WebApp.lockOrientation();	
+		
+		//Вопрос подтверждения закрытия
+		Telegram.WebApp.enableClosingConfirmation();
+		
+		const initData = Telegram.WebApp.initData;
+		const params = new URLSearchParams(initData);
+		const userData = params.get('user');
+		
+		if (userData) {
+			const user = JSON.parse(userData);
+			const userId = user.id;
+			console.log('User ID:', userId);
+			//alert(userId);
+			} else {
+			console.log('User data not available');
+			//alert("User data not available");
+		}
+		
+		Telegram.WebApp.requestFullscreen();
+		Telegram.WebApp.disableVerticalSwipes();
+		
+	</script>
+	
+	<script language="JavaScript"> 
+		window.location.href = "https://c-m-p.mooo.com/for_developers/2025.09.09_testLite_predprenimatel";
+	</script>
+	
+</body>
+</html>
