@@ -11,15 +11,22 @@
     <script>
       // Fallback bridge: Unity can call window.GameOver even if external loader script fails.
       var buildCfg = window.CMP_BUILD_CONFIG || {};
-      var fullUrlFromConfig = buildCfg.fullUrl || '/prod_bilds/2025.12.25_new_api_serv/';
+      var defaultCfg = window.CMP_BUILD_DEFAULTS || {};
+      var fullUrlFromConfig = buildCfg.fullUrl || defaultCfg.fullUrl || '/for_developers/2025.12.25_new_api_serv/';
 
       window.SequentialLoaderConfig = {
         fullBuildUrl: fullUrlFromConfig,
-        fullVersion: buildCfg.fullVersion || 'unknown',
+        fullVersion: buildCfg.fullVersion || defaultCfg.fullVersion || 'unknown',
         manifestPath: 'build-manifest.json',
         prefetchDelayMs: 25000,
         prefetchTimeoutMs: 45000,
-        overlayFadeMs: 220
+        overlayFadeMs: 220,
+        prefetchStartLevel: Number(buildCfg.prefetchStartLevel || defaultCfg.prefetchStartLevel || 3),
+        prefetchForceValidateLevel: Number(buildCfg.prefetchForceValidateLevel || defaultCfg.prefetchForceValidateLevel || 5),
+        targetSwitchLevel: Number(buildCfg.targetSwitchLevel || defaultCfg.targetSwitchLevel || 6),
+        enableLevelGate: buildCfg.enableLevelGate !== false,
+        switchTriggerMode: buildCfg.switchTriggerMode || defaultCfg.switchTriggerMode || 'level',
+        autoSwitchOnTargetLevel: buildCfg.autoSwitchOnTargetLevel !== false
       };
 
       window.__cmpSwitchToFull = function() {

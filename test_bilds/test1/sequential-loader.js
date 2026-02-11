@@ -1,7 +1,10 @@
 (function () {
+  const BUILD_DEFAULTS = window.CMP_BUILD_DEFAULTS || {};
+  const BUILD_CONFIG = window.CMP_BUILD_CONFIG || {};
+
   const DEFAULTS = {
-    fullBuildUrl: (window.CMP_BUILD_CONFIG && window.CMP_BUILD_CONFIG.fullUrl) || '/prod_bilds/2025.12.25_new_api_serv/',
-    fullVersion: (window.CMP_BUILD_CONFIG && window.CMP_BUILD_CONFIG.fullVersion) || 'unknown',
+    fullBuildUrl: BUILD_CONFIG.fullUrl || BUILD_DEFAULTS.fullUrl || '/for_developers/2025.12.25_new_api_serv/',
+    fullVersion: BUILD_CONFIG.fullVersion || BUILD_DEFAULTS.fullVersion || 'unknown',
     manifestPath: 'build-manifest.json',
     manifestTimeoutMs: 12000,
     prefetchDelayMs: 25000,
@@ -14,6 +17,13 @@
     retryDelayMs: 10000,
     gameOverWaitTimeoutMs: 8000,
     switchRetryTimeoutMs: 15000,
+    prefetchStartLevel: Number(BUILD_CONFIG.prefetchStartLevel || BUILD_DEFAULTS.prefetchStartLevel || 3),
+    prefetchForceValidateLevel: Number(BUILD_CONFIG.prefetchForceValidateLevel || BUILD_DEFAULTS.prefetchForceValidateLevel || 5),
+    targetSwitchLevel: Number(BUILD_CONFIG.targetSwitchLevel || BUILD_DEFAULTS.targetSwitchLevel || 6),
+    enableLevelGate: BUILD_CONFIG.enableLevelGate !== false,
+    switchTriggerMode: BUILD_CONFIG.switchTriggerMode || BUILD_DEFAULTS.switchTriggerMode || 'level',
+    autoSwitchOnTargetLevel: BUILD_CONFIG.autoSwitchOnTargetLevel !== false,
+    forceWaitOnGameOverMs: 2500,
   };
 
   const cfg = Object.assign({}, DEFAULTS, window.SequentialLoaderConfig || {});
@@ -24,12 +34,45 @@
   const legacyReadyKey = `cmp_full_ready:${fullBaseUrl}`;
   const legacyVersionKey = `cmp_full_version:${fullBaseUrl}`;
   const telemetryKey = `cmp_full_telemetry:${fullBaseUrl}`;
+  const cacheMetaKey = `cmp_full_cache_meta:${fullBaseUrl}`;
 
   let prefetchPromise = null;
   let switching = false;
   let levelHookTriggered = false;
+  let forceValidateTriggered = false;
+  let highestSeenLevel = 0;
+  let targetSwitchTriggered = false;
   let retryTimer = null;
   let prefetchQueued = false;
+
+  function isCriticalAssetUrl(url) {
+    return /\.loader\.js$|\.framework\.js\.br$|\.data\.br$|\.wasm\.br$|\.symbols\.json\.br$/.test(url);
+  }
+
+  function normalizeManifest(rawManifest) {
+    const manifest = rawManifest && typeof rawManifest === 'object' ? rawManifest : {};
+    const files = Array.isArray(manifest.files) ? manifest.files : [];
+    const critical = Array.isArray(manifest.critical) ? manifest.critical : [];
+    const manifestVersion = typeof manifest.version === 'string' ? manifest.version : '';
+
+    if (!files.length) throw new Error('manifest has no files');
+    if (manifestVersion && manifestVersion !== cfg.fullVersion) {
+      throw new Error(`manifest version mismatch: ${manifestVersion} !== ${cfg.fullVersion}`);
+    }
+
+    const allUrls = files.map((path) => new URL(path, fullBaseUrl).toString());
+    const criticalSet = new Set(critical.map((path) => new URL(path, fullBaseUrl).toString()));
+
+    if (!criticalSet.size) {
+      allUrls.filter((u) => isCriticalAssetUrl(u)).forEach((u) => criticalSet.add(u));
+    }
+
+    return {
+      version: manifestVersion || cfg.fullVersion,
+      urls: Array.from(new Set([fullIndexUrl, ...allUrls])),
+      criticalUrls: Array.from(criticalSet),
+    };
+  }
 
   function now() {
     return Date.now();
@@ -129,6 +172,11 @@
   function markReady(reason) {
     localStorage.setItem(legacyReadyKey, '1');
     localStorage.setItem(legacyVersionKey, cfg.fullVersion);
+    localStorage.setItem(cacheMetaKey, JSON.stringify({
+      cacheName: `cmp-full-prefetch:${fullBaseUrl}:${cfg.fullVersion}`,
+      version: cfg.fullVersion,
+      updatedAt: now(),
+    }));
     return writeState({
       status: 'ready',
       version: cfg.fullVersion,
@@ -178,7 +226,7 @@
       'display:flex',
       'align-items:center',
       'justify-content:center',
-      'background:#0d0f16',
+      'background:#0d0f16 url(/for_developers/2025.09.09_testLite_predprenimatel/loading_bg.jpg) center / cover no-repeat',
       'color:#fff',
       'font:600 16px/1.4 Arial,sans-serif',
       'letter-spacing:.02em',
@@ -261,30 +309,20 @@
       const resp = await fetchWithTimeout(manifestUrl, cfg.manifestTimeoutMs);
       if (!resp.ok) throw new Error(`status=${resp.status}`);
       const json = await resp.json();
-      const files = Array.isArray(json && json.files) ? json.files : [];
-      const critical = Array.isArray(json && json.critical) ? json.critical : [];
-      if (!files.length) throw new Error('manifest has no files');
-
-      const allUrls = files.map((path) => new URL(path, fullBaseUrl).toString());
-      const criticalSet = new Set(critical.map((path) => new URL(path, fullBaseUrl).toString()));
-
-      if (!criticalSet.size) {
-        allUrls
-          .filter((u) => /\.loader\.js$|\.framework\.js\.br$|\.data\.br$|\.wasm\.br$|\.symbols\.json\.br$/.test(u))
-          .forEach((u) => criticalSet.add(u));
-      }
-
+      const normalized = normalizeManifest(json);
       return {
         source: 'manifest',
-        urls: Array.from(new Set([fullIndexUrl, ...allUrls])),
-        criticalUrls: Array.from(criticalSet),
+        version: normalized.version,
+        urls: normalized.urls,
+        criticalUrls: normalized.criticalUrls,
       };
     } catch (err) {
       console.warn('[SequentialLoader] Manifest unavailable, fallback parser will be used', err);
       const fallbackUrls = parseBuildAssetsFallback(html, fullBaseUrl);
-      const criticalUrls = fallbackUrls.filter((u) => /\.loader\.js$|\.framework\.js\.br$|\.data\.br$|\.wasm\.br$|\.symbols\.json\.br$/.test(u));
+      const criticalUrls = fallbackUrls.filter((u) => isCriticalAssetUrl(u));
       return {
         source: 'fallback',
+        version: cfg.fullVersion,
         urls: Array.from(new Set([fullIndexUrl, ...fallbackUrls])),
         criticalUrls,
       };
@@ -293,7 +331,10 @@
 
   async function prefetchUrls(cache, urls, criticalSet) {
     const failedCritical = new Set();
-    const queue = [...urls];
+    const queue = [
+      ...urls.filter((u) => criticalSet.has(u)),
+      ...urls.filter((u) => !criticalSet.has(u)),
+    ];
     const workers = Array.from({ length: Math.max(1, cfg.prefetchConcurrency) }, async () => {
       while (queue.length) {
         const nextUrl = queue.shift();
@@ -328,6 +369,22 @@
 
 
 
+  function shouldUseLevelGate() {
+    return !!cfg.enableLevelGate;
+  }
+
+  async function ensureReadyForSwitch(trigger) {
+    const readyByState = isStateReady(readState());
+    if (readyByState) {
+      const cacheReady = await hasCriticalAssetsInCache();
+      if (cacheReady) return true;
+    }
+
+    writeTelemetry({ readinessEnsureAt: now(), readinessTrigger: trigger || 'unknown' });
+    await prefetchBuild(trigger || 'ensure-ready');
+    return isStateReady(readState()) && await hasCriticalAssetsInCache();
+  }
+
   async function hasCriticalAssetsInCache() {
     const cacheName = `cmp-full-prefetch:${fullBaseUrl}:${cfg.fullVersion}`;
     const cache = await caches.open(cacheName);
@@ -344,7 +401,7 @@
         } else {
           criticalUrls = files
             .map((path) => new URL(path, fullBaseUrl).toString())
-            .filter((u) => /\.loader\.js$|\.framework\.js\.br$|\.data\.br$|\.wasm\.br$|\.symbols\.json\.br$/.test(u));
+            .filter((u) => isCriticalAssetUrl(u));
         }
       }
     } catch (err) {
@@ -363,7 +420,7 @@
           } else {
             criticalUrls = files
               .map((path) => new URL(path, fullBaseUrl).toString())
-              .filter((u) => /\.loader\.js$|\.framework\.js\.br$|\.data\.br$|\.wasm\.br$|\.symbols\.json\.br$/.test(u));
+              .filter((u) => isCriticalAssetUrl(u));
           }
           await cache.put(manifestUrl, new Response(JSON.stringify(manifest), {
             headers: { 'Content-Type': 'application/json; charset=utf-8' },
@@ -378,7 +435,7 @@
       const cachedRequests = await cache.keys();
       criticalUrls = cachedRequests
         .map((req) => req.url)
-        .filter((u) => /\.loader\.js$|\.framework\.js\.br$|\.data\.br$|\.wasm\.br$|\.symbols\.json\.br$/.test(u));
+        .filter((u) => isCriticalAssetUrl(u));
     }
 
     if (!criticalUrls.length) return false;
@@ -443,7 +500,7 @@
       if (failedCritical.size || missing.length) {
         const failedList = [...failedCritical, ...missing];
         markFailed(`critical-missing:${failedList.length}`);
-        writeTelemetry({ prefetchFailedAt: now(), prefetchFailReason: `critical-missing:${failedList.length}` });
+        writeTelemetry({ prefetchFailedAt: now(), prefetchFailReason: `critical-missing:${failedList.length}`, criticalMissingCount: failedList.length });
         console.warn('[SequentialLoader] Prefetch incomplete, critical assets are missing', failedList);
         scheduleRetry('critical-missing');
         return false;
@@ -454,7 +511,7 @@
         retryTimer = null;
       }
       markReady(`source:${manifest.source}`);
-      writeTelemetry({ prefetchReadyAt: now(), prefetchSource: manifest.source });
+      writeTelemetry({ prefetchReadyAt: now(), prefetchSource: manifest.source, prefetchManifestVersion: manifest.version, criticalCount: manifest.criticalUrls.length, totalPrefetchCount: manifest.urls.length });
       console.log('[SequentialLoader] Full build prefetched and validated');
       return true;
     })().catch((err) => {
@@ -468,6 +525,38 @@
     });
 
     return prefetchPromise;
+  }
+
+  function shouldSwitchOnLevel() {
+    return cfg.autoSwitchOnTargetLevel && cfg.switchTriggerMode === 'level';
+  }
+
+  async function switchToFullFromLevel(levelNum) {
+    if (switching || targetSwitchTriggered) return;
+    targetSwitchTriggered = true;
+
+    writeTelemetry({ levelSwitchRequestedAt: now(), levelSwitchLevel: levelNum });
+
+    const ready = await ensureReadyForSwitch(`target-level:${levelNum}`);
+    if (ready) {
+      writeTelemetry({ levelSwitchMode: 'instant', levelSwitchAt: now() });
+      goToFullBuild(false);
+      return;
+    }
+
+    showOverlay(cfg.waitingText);
+    const waitStart = now();
+    await Promise.race([
+      prefetchBuild(`target-level-retry:${levelNum}`),
+      new Promise((resolve) => setTimeout(resolve, cfg.switchRetryTimeoutMs)),
+    ]);
+
+    writeTelemetry({
+      levelSwitchMode: 'fallback',
+      levelSwitchWaitMs: now() - waitStart,
+      levelSwitchAt: now(),
+    });
+    goToFullBuild(true);
   }
 
   function goToFullBuild(useOverlay) {
@@ -487,38 +576,28 @@
 
   window.GameOver = async function () {
     console.log('[SequentialLoader] GameOver hook called');
-    writeTelemetry({ switchRequestedAt: now() });
+    writeTelemetry({ switchRequestedAt: now(), highestSeenLevel });
 
-    const stateReady = isStateReady(readState());
-    if (stateReady) {
-      const cacheReady = await hasCriticalAssetsInCache();
-      if (cacheReady) {
-        writeTelemetry({ switchInstantAt: now(), switchMode: 'instant' });
-        goToFullBuild(false);
-        return;
-      }
-      console.warn('[SequentialLoader] State says ready but cache validation failed; forcing blocking prefetch');
+    const instantReady = isStateReady(readState()) && await hasCriticalAssetsInCache();
+    if (instantReady) {
+      writeTelemetry({ switchInstantAt: now(), switchMode: 'instant' });
+      goToFullBuild(false);
+      return;
     }
 
     showOverlay(cfg.waitingText);
     const waitStart = now();
+    const waitBudget = shouldUseLevelGate() ? cfg.forceWaitOnGameOverMs : cfg.gameOverWaitTimeoutMs;
+
     await Promise.race([
-      prefetchBuild('gameover'),
-      new Promise((resolve) => setTimeout(resolve, cfg.gameOverWaitTimeoutMs)),
+      ensureReadyForSwitch('gameover-ensure'),
+      new Promise((resolve) => setTimeout(resolve, waitBudget)),
     ]);
 
-    let finalReady = isStateReady(readState()) && await hasCriticalAssetsInCache();
-    if (!finalReady) {
-      await Promise.race([
-        prefetchBuild('gameover-retry'),
-        new Promise((resolve) => setTimeout(resolve, cfg.switchRetryTimeoutMs)),
-      ]);
-      finalReady = isStateReady(readState()) && await hasCriticalAssetsInCache();
-    }
-
+    const finalReady = isStateReady(readState()) && await hasCriticalAssetsInCache();
     writeTelemetry({
       switchBlockingAt: now(),
-      switchMode: 'blocking',
+      switchMode: finalReady ? 'blocking-ready' : 'blocking-fallback',
       switchWaitMs: now() - waitStart,
       switchFinalReady: finalReady,
     });
@@ -528,12 +607,34 @@
   window.GameLevelReached = function (level) {
     const levelNum = Number(level);
     if (Number.isNaN(levelNum)) return;
-    if (levelNum >= 3 && !levelHookTriggered) {
+
+    highestSeenLevel = Math.max(highestSeenLevel, levelNum);
+    writeTelemetry({ lastSeenLevel: highestSeenLevel });
+
+    if (levelNum >= cfg.prefetchStartLevel && !levelHookTriggered) {
       levelHookTriggered = true;
       console.log('[SequentialLoader] Starting prefetch from level hook', levelNum);
-      queuePrefetch('level');
+      queuePrefetch(`level:${levelNum}`);
+    }
+
+    if (shouldUseLevelGate() && levelNum >= cfg.prefetchForceValidateLevel && !forceValidateTriggered) {
+      forceValidateTriggered = true;
+      console.log('[SequentialLoader] Force validating full build readiness', levelNum);
+      ensureReadyForSwitch(`force-validate:${levelNum}`).then((ready) => {
+        writeTelemetry({
+          readinessValidatedAt: now(),
+          readinessValidatedLevel: levelNum,
+          readinessValidated: !!ready,
+        });
+      });
+    }
+
+    if (shouldSwitchOnLevel() && levelNum >= cfg.targetSwitchLevel) {
+      console.log('[SequentialLoader] Target level reached, switching to full', levelNum);
+      switchToFullFromLevel(levelNum);
     }
   };
+
 
   migrateLegacyReadyState();
 

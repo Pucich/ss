@@ -5,28 +5,67 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CMP Build Router</title>
   <style>
-    body {
+    html, body {
       margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background: #0d0f16;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #1d2733;
+    }
+
+    .router-splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: url('/for_developers/2025.09.09_testLite_predprenimatel/loading_bg.jpg');
+      background-size: cover;
+      background-position: center;
       color: #fff;
-      font: 600 16px/1.4 Arial, sans-serif;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .router-splash__panel {
+      width: min(360px, 92vw);
+      padding: 16px 20px;
+      border-radius: 12px;
+      background: rgba(9, 16, 31, 0.68);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(2px);
+    }
+
+    .router-splash__title {
+      margin: 0 0 10px;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: .01em;
+    }
+
+    .router-splash__subtitle {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.9;
+      font-weight: 600;
     }
   </style>
   <script src="./build-config.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
 </head>
 <body>
-  <div>Подготавливаем игру…</div>
+  <div class="router-splash" id="router-splash">
+    <div class="router-splash__panel">
+      <p class="router-splash__title">Подготавливаем игру…</p>
+      <p class="router-splash__subtitle">Проверяем готовность полной версии</p>
+    </div>
+  </div>
 
   <script>
     (function () {
-      const ROUTER = Object.assign({
-        liteUrl: '/2025.12.13_build_cut_SergeyZ/',
-        fullUrl: '/prod_bilds/2025.12.25_new_api_serv/',
-      }, window.CMP_BUILD_CONFIG || {});
+      const ROUTER = Object.assign({}, window.CMP_BUILD_DEFAULTS || {}, window.CMP_BUILD_CONFIG || {});
 
       let fullBase = '';
 
@@ -81,7 +120,7 @@
           const stateKey = `cmp_full_state:${fullBase}`;
           const stateRaw = localStorage.getItem(stateKey);
           const state = stateRaw ? JSON.parse(stateRaw) : null;
-          const targetVersion = ROUTER.fullVersion || 'unknown';
+          const targetVersion = ROUTER.fullVersion || (window.CMP_BUILD_DEFAULTS && window.CMP_BUILD_DEFAULTS.fullVersion) || 'unknown';
           const stateReady = !!(
             state &&
             state.status === 'ready' &&
