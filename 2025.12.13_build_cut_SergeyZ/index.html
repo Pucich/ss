@@ -7,6 +7,27 @@
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
+    <script>
+      // Fallback bridge: Unity can call window.GameOver even if external loader script fails.
+      window.SequentialLoaderConfig = {
+        fullBuildUrl: '/prod_bilds/2025.12.25_new_api_serv/',
+        prefetchDelayMs: 25000,
+        prefetchTimeoutMs: 45000,
+        overlayFadeMs: 220
+      };
+
+      window.__cmpSwitchToFull = function() {
+        var fullUrl = (window.SequentialLoaderConfig && window.SequentialLoaderConfig.fullBuildUrl) || '/prod_bilds/2025.12.25_new_api_serv/';
+        window.location.replace(fullUrl);
+      };
+
+      if (typeof window.GameOver !== 'function') {
+        window.GameOver = function() {
+          console.warn('[LiteBuild] Fallback GameOver bridge is used');
+          window.__cmpSwitchToFull();
+        };
+      }
+    </script>
   </head>
   <body>
     <script src="https://cdn.lgrckt-in.com/LogRocket.min.js" crossorigin="anonymous"></script>
@@ -175,15 +196,7 @@
 	</script>
   
 <script src="good_loading.js"></script>
-	<script>
-	  window.SequentialLoaderConfig = {
-	    fullBuildUrl: '/prod_bilds/2025.12.25_new_api_serv/',
-	    prefetchDelayMs: 25000,
-	    prefetchTimeoutMs: 45000,
-	    overlayFadeMs: 220
-	  };
-	</script>
-	<script src="/test_bilds/test1/sequential-loader.js"></script>
+	<script src="/test_bilds/test1/sequential-loader.js" onerror="console.warn('[LiteBuild] sequential-loader.js failed to load, fallback GameOver bridge will be used')"></script>
 	
   </body>
 </html>
