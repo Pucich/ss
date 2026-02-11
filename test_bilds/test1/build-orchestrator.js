@@ -21,6 +21,37 @@
   const fullFrame = document.getElementById('full-frame');
   const overlay = document.getElementById('handover-overlay');
 
+  function getResumeLevel() {
+    return state.knownLevel > 0 ? (state.knownLevel + 1) : 1;
+  }
+
+  function buildFullUrl(isPreload) {
+    const separator = state.manifest.full.url.includes('?') ? '&' : '?';
+    const params = new URLSearchParams({ mode: 'full' });
+
+    if (isPreload) {
+      params.set('preload', '1');
+    }
+
+    params.set('resumeLevel', String(getResumeLevel()));
+
+    return `${state.manifest.full.url}${separator}${params.toString()}`;
+  }
+
+  function sendHandoverStateToFull(reason) {
+    if (!fullFrame.contentWindow) {
+      return;
+    }
+
+    fullFrame.contentWindow.postMessage({
+      type: 'handover-state',
+      buildId: 'full',
+      reason,
+      resumeLevel: getResumeLevel(),
+      knownLiteLevel: state.knownLevel
+    }, window.location.origin);
+  }
+
   function safeParseJson(text) {
     try {
       return JSON.parse(text);
@@ -110,7 +141,7 @@
     state.preloadQueued = false;
     state.preloadQueueReason = null;
 
-    fullFrame.src = `${state.manifest.full.url}${state.manifest.full.url.includes('?') ? '&' : '?'}mode=full&preload=1`;
+    fullFrame.src = buildFullUrl(true);
     console.log('[orchestrator] full preload started:', reason);
   }
 
@@ -167,6 +198,7 @@
     state.handoverRequested = true;
     state.switchStartedAt = Date.now();
     startFullPreload(`switch:${reason}`);
+    sendHandoverStateToFull(`switch:${reason}`);
 
     if (state.fullReady) {
       completeSwitch();
@@ -203,6 +235,7 @@
     const msg = event.data;
 
     if (msg.type === 'build-ready' && msg.buildId === 'full') {
+      sendHandoverStateToFull('full-build-ready');
       markFullReady();
       return;
     }
@@ -214,6 +247,10 @@
 
     if (msg.type === 'level-reached' && msg.buildId === 'lite') {
       state.knownLevel = Number(msg.level) || 0;
+      if (state.preloadStarted) {
+        sendHandoverStateToFull('lite-level-update');
+      }
+
       if (state.knownLevel >= 3) {
         queueFullPreload('level-trigger');
         runPreloadWhenSafe();

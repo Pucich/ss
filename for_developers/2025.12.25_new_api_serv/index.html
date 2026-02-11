@@ -64,10 +64,52 @@
       const runtimeParams = new URLSearchParams(window.location.search);
       const isPreloadMode = runtimeParams.get('preload') === '1';
 
+      const handoverState = {
+        resumeLevel: Number(runtimeParams.get('resumeLevel')) || 1,
+        knownLiteLevel: Math.max((Number(runtimeParams.get('resumeLevel')) || 1) - 1, 0),
+        reason: 'initial-url'
+      };
+
+      function setHandoverState(nextState) {
+        if (!nextState || typeof nextState !== 'object') {
+          return;
+        }
+
+        const incomingResume = Number(nextState.resumeLevel);
+        if (incomingResume > 0) {
+          handoverState.resumeLevel = incomingResume;
+          handoverState.knownLiteLevel = Math.max(incomingResume - 1, 0);
+        }
+
+        const incomingKnown = Number(nextState.knownLiteLevel);
+        if (incomingKnown >= 0) {
+          handoverState.knownLiteLevel = incomingKnown;
+        }
+
+        handoverState.reason = nextState.reason || handoverState.reason;
+
+        localStorage.setItem('handover:resume-level', String(handoverState.resumeLevel));
+        localStorage.setItem('handover:known-lite-level', String(handoverState.knownLiteLevel));
+      }
+
+      window.__CM_HandoverState = handoverState;
+
       window.addEventListener("load", function () {
         if ("serviceWorker" in navigator && !isPreloadMode) {
           navigator.serviceWorker.register("ServiceWorker.js");
         }
+      });
+
+      window.addEventListener('message', function(event) {
+        if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+          return;
+        }
+
+        if (event.data.type !== 'handover-state' || event.data.buildId !== 'full') {
+          return;
+        }
+
+        setHandoverState(event.data);
       });
 
       var container = document.querySelector("#unity-container");
@@ -136,6 +178,8 @@
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
         }).then((unityInstance) => {
+          window.unityInstance = unityInstance;
+          setHandoverState(handoverState);
           loadingBar.style.display = "none";
           if (window.parent && window.parent !== window) {
             const mode = new URLSearchParams(window.location.search).get('mode') === 'full' ? 'full' : 'lite';
