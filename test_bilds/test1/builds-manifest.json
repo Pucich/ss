@@ -1,7 +1,8 @@
 {
   "preload": {
     "triggerDelayMs": 14000,
-    "fallbackSwitchTimeoutMs": 15000
+    "fallbackSwitchTimeoutMs": 15000,
+    "switchMinLiteLevel": 6
   },
   "lite": {
     "id": "lite",
