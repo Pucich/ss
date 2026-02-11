@@ -62,6 +62,36 @@
       let handoverRetryTimer = null;
       let handoverRetryCount = 0;
 
+      const storageFallback = {};
+      let storageWarned = false;
+
+      function warnStorageFallbackOnce(error) {
+        if (storageWarned) {
+          return;
+        }
+        storageWarned = true;
+        console.warn('[full] localStorage unavailable, using in-memory fallback', error);
+      }
+
+      function safeStorageGet(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch (error) {
+          warnStorageFallbackOnce(error);
+          return Object.prototype.hasOwnProperty.call(storageFallback, key) ? storageFallback[key] : null;
+        }
+      }
+
+      function safeStorageSet(key, value) {
+        try {
+          localStorage.setItem(key, value);
+          return;
+        } catch (error) {
+          warnStorageFallbackOnce(error);
+        }
+        storageFallback[key] = String(value);
+      }
+
       function loadScriptOnce(src) {
         return new Promise((resolve) => {
           if (document.querySelector(`script[src="${src}"]`)) {
@@ -91,8 +121,8 @@
       }
 
       const handoverState = {
-        resumeLevel: Number(localStorage.getItem('handover:resume-level')) || 1,
-        knownLiteLevel: Number(localStorage.getItem('handover:known-lite-level')) || 0,
+        resumeLevel: Number(safeStorageGet('handover:resume-level')) || 1,
+        knownLiteLevel: Number(safeStorageGet('handover:known-lite-level')) || 0,
         reason: 'bootstrap'
       };
 
@@ -161,8 +191,8 @@
 
         handoverState.reason = nextState.reason || handoverState.reason;
 
-        localStorage.setItem('handover:resume-level', String(handoverState.resumeLevel));
-        localStorage.setItem('handover:known-lite-level', String(handoverState.knownLiteLevel));
+        safeStorageSet('handover:resume-level', String(handoverState.resumeLevel));
+        safeStorageSet('handover:known-lite-level', String(handoverState.knownLiteLevel));
 
         applyHandoverToUnity();
       }

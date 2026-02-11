@@ -98,24 +98,37 @@
 
   <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
   <script>
-    Telegram.WebApp.ready();
-    Telegram.WebApp.lockOrientation();
-    Telegram.WebApp.enableClosingConfirmation();
+    (function initTelegramWebAppSafe() {
+      if (!window.Telegram || !Telegram.WebApp) {
+        console.log('[twa] Telegram WebApp API unavailable');
+        return;
+      }
 
-    const initData = Telegram.WebApp.initData;
-    const params = new URLSearchParams(initData);
-    const userData = params.get('user');
+      const webApp = Telegram.WebApp;
 
-    if (userData) {
-      const user = JSON.parse(userData);
-      const userId = user.id;
-      console.log('User ID:', userId);
-    } else {
-      console.log('User data not available');
-    }
+      try { webApp.ready(); } catch (error) { console.warn('[twa] ready failed', error); }
+      try { webApp.lockOrientation && webApp.lockOrientation(); } catch (error) { console.warn('[twa] lockOrientation failed', error); }
+      try { webApp.enableClosingConfirmation && webApp.enableClosingConfirmation(); } catch (error) { console.warn('[twa] closing confirmation failed', error); }
+      try { webApp.requestFullscreen && webApp.requestFullscreen(); } catch (error) { console.warn('[twa] requestFullscreen failed', error); }
+      try { webApp.disableVerticalSwipes && webApp.disableVerticalSwipes(); } catch (error) { console.warn('[twa] disableVerticalSwipes failed', error); }
 
-    Telegram.WebApp.requestFullscreen();
-    Telegram.WebApp.disableVerticalSwipes();
+      try {
+        const initData = webApp.initData || '';
+        const params = new URLSearchParams(initData);
+        const userData = params.get('user');
+
+        if (!userData) {
+          console.log('[twa] user data not available');
+          return;
+        }
+
+        const user = JSON.parse(userData);
+        const userId = user.id;
+        console.log('User ID:', userId);
+      } catch (error) {
+        console.warn('[twa] initData parse failed', error);
+      }
+    })();
   </script>
 
   <script src="./build-orchestrator.js"></script>

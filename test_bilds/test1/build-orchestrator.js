@@ -26,13 +26,74 @@
   const fullFrame = document.getElementById('full-frame');
   const overlay = document.getElementById('handover-overlay');
 
+  const storageFallback = {};
+  let storageWarned = false;
+
+  function warnStorageFallbackOnce(error) {
+    if (storageWarned) {
+      return;
+    }
+    storageWarned = true;
+    console.warn('[orchestrator] localStorage unavailable, using in-memory fallback', error);
+  }
+
+  function safeStorageGet(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      warnStorageFallbackOnce(error);
+      return Object.prototype.hasOwnProperty.call(storageFallback, key) ? storageFallback[key] : null;
+    }
+  }
+
+  function safeStorageSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return;
+    } catch (error) {
+      warnStorageFallbackOnce(error);
+    }
+    storageFallback[key] = String(value);
+  }
+
+  function safeStorageRemove(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      warnStorageFallbackOnce(error);
+    }
+    delete storageFallback[key];
+  }
+
+  function safeStorageKeysByPrefix(prefix) {
+    const keys = [];
+    try {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(prefix)) {
+          keys.push(key);
+        }
+      }
+    } catch (error) {
+      warnStorageFallbackOnce(error);
+    }
+
+    Object.keys(storageFallback).forEach((key) => {
+      if (key.startsWith(prefix) && !keys.includes(key)) {
+        keys.push(key);
+      }
+    });
+
+    return keys;
+  }
+
   function getResumeLevel() {
     return state.knownLevel > 0 ? (state.knownLevel + 1) : 1;
   }
 
   function persistHandoverLevel() {
-    localStorage.setItem('handover:resume-level', String(getResumeLevel()));
-    localStorage.setItem('handover:known-lite-level', String(state.knownLevel));
+    safeStorageSet('handover:resume-level', String(getResumeLevel()));
+    safeStorageSet('handover:known-lite-level', String(state.knownLevel));
   }
 
   function sendMessageToFull(payload) {
@@ -87,7 +148,7 @@
     state.fullReady = true;
     const cacheKey = getFullReadyKey();
     if (cacheKey) {
-      localStorage.setItem(cacheKey, '1');
+      safeStorageSet(cacheKey, '1');
     }
 
     if (state.handoverRequested) {
@@ -108,7 +169,7 @@
       return;
     }
 
-    state.fullReady = localStorage.getItem(cacheKey) === '1';
+    state.fullReady = safeStorageGet(cacheKey) === '1';
   }
 
   function resetOldFullReadyFlags() {
@@ -117,9 +178,9 @@
     }
 
     const keep = getFullReadyKey();
-    Object.keys(localStorage).forEach((key) => {
-      if (key.startsWith('full-ready:') && key !== keep) {
-        localStorage.removeItem(key);
+    safeStorageKeysByPrefix('full-ready:').forEach((key) => {
+      if (key !== keep) {
+        safeStorageRemove(key);
       }
     });
   }
