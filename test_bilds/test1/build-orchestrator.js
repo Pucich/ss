@@ -1,9 +1,11 @@
 (function () {
   const MANIFEST_URL = './builds-manifest.json';
   const PRELOAD_FORCE_AFTER_MS = 12000;
-  const PRELOAD_LEVEL_FORCE = 5;
+  const SWITCH_MASK_SHOW_DELAY_MS = 180;
   const SWITCH_GRACE_EXTRA_MS = 6000;
   const ACTIVE_BUILD_SESSION_KEY = 'handover:active-build-session';
+    overlayDelayTimer: null,
+    overlayShownAt: 0,
   const ACTIVE_BUILD_LOCAL_KEY = 'handover:active-build-local';
   const ACTIVE_BUILD_LOCAL_TTL_MS = 15 * 60 * 1000;
 
@@ -120,6 +122,17 @@
       // Ignore sessionStorage unavailability and use in-memory fallback.
     }
     delete sessionFallback[key];
+  }
+
+    state.overlayShownAt = Date.now();
+    state.overlayShownAt = 0;
+  function clearOverlayDelayTimer() {
+    if (!state.overlayDelayTimer) {
+      return;
+    }
+
+    clearTimeout(state.overlayDelayTimer);
+    state.overlayDelayTimer = null;
   }
 
   function getResumeLevel() {
@@ -311,16 +324,21 @@
       return;
     }
 
-    if (document.visibilityState === 'hidden') {
-      startFullPreload(`${queuedReason}:hidden-tab`);
+    clearOverlayDelayTimer();
+    state.overlayDelayTimer = window.setTimeout(() => {
+      state.overlayDelayTimer = null;
+      if (state.handoverRequested && state.active !== 'full' && !state.fullReady) {
+        showOverlay();
+      }
+    }, SWITCH_MASK_SHOW_DELAY_MS);
+
+    clearOverlayDelayTimer();
+
+    const overlayVisible = overlay.classList.contains('is-visible');
+    const maskVisibleForMs = state.overlayShownAt > 0 ? (Date.now() - state.overlayShownAt) : 0;
+    const hideDelay = overlayVisible && maskVisibleForMs < minMaskMs ? (minMaskMs - maskVisibleForMs) : 0;
       return;
     }
-
-    if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback((deadline) => {
-        if (!state.preloadQueued || state.preloadStarted) {
-          return;
-        }
 
         const isSafeNow = deadline.didTimeout || deadline.timeRemaining() >= 12;
 
