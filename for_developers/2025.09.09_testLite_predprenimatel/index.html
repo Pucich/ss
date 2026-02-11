@@ -133,6 +133,10 @@
           progressBarFull.style.width = 100 * progress + "%";
         }).then((unityInstance) => {
           loadingBar.style.display = "none";
+          if (window.parent && window.parent !== window) {
+            const mode = new URLSearchParams(window.location.search).get('mode') === 'full' ? 'full' : 'lite';
+            window.parent.postMessage({ type: 'build-ready', buildId: mode }, window.location.origin);
+          }
         }).catch((message) => {
           alert(message);
         });
@@ -175,6 +179,22 @@
 	</script>
   
 <script src="good_loading.js"></script>
+
+  <script>
+    window.GameOver = function() {
+      if (window.parent && window.parent !== window) {
+        const mode = new URLSearchParams(window.location.search).get('mode') === 'full' ? 'full' : 'lite';
+        window.parent.postMessage({ type: 'game-over', buildId: mode }, window.location.origin);
+      }
+    };
+
+    window.GameLevelReached = function(level) {
+      if (window.parent && window.parent !== window) {
+        const mode = new URLSearchParams(window.location.search).get('mode') === 'full' ? 'full' : 'lite';
+        window.parent.postMessage({ type: 'level-reached', buildId: mode, level: Number(level) || 0 }, window.location.origin);
+      }
+    };
+  </script>
 	
   </body>
 </html>

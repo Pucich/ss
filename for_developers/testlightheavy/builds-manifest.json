@@ -1,0 +1,16 @@
+{
+  "preload": {
+    "triggerDelayMs": 14000,
+    "fallbackSwitchTimeoutMs": 15000
+  },
+  "lite": {
+    "id": "lite",
+    "version": "2025.09.09_testLite_predprenimatel",
+    "url": "../2025.09.09_testLite_predprenimatel/index.html"
+  },
+  "full": {
+    "id": "full",
+    "version": "2025.12.25_new_api_serv",
+    "url": "../2025.12.25_new_api_serv/index.html"
+  }
+}
