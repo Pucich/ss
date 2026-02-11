@@ -1,4 +1,5 @@
 (function () {
+  window.__CM_OrchestratorBooted = true;
   const MANIFEST_URL = './builds-manifest.json';
   const PRELOAD_FORCE_AFTER_MS = 12000;
   const SWITCH_MASK_SHOW_DELAY_MS = 180;

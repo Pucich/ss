@@ -107,6 +107,44 @@
       if (!window.Telegram || !Telegram.WebApp) {
         window.__CM_ShellRuntime = runtime;
   <script src="./build-orchestrator.js"></script>
+
+  <script>
+    (function fallbackLiteBootstrap() {
+      window.setTimeout(async () => {
+        if (window.__CM_OrchestratorBooted) {
+          return;
+        }
+
+        const liteFrame = document.getElementById('lite-frame');
+        const fullFrame = document.getElementById('full-frame');
+        if (!liteFrame) {
+          return;
+        }
+
+        try {
+          const response = await fetch('./builds-manifest.json', { cache: 'no-store' });
+          const manifest = await response.json();
+          const lite = manifest && manifest.lite ? manifest.lite : null;
+          if (!lite || !lite.url) {
+            return;
+          }
+
+          const joiner = lite.url.indexOf('?') >= 0 ? '&' : '?';
+          liteFrame.src = `${lite.url}${joiner}mode=lite`;
+          liteFrame.classList.add('is-active');
+
+          if (fullFrame) {
+            fullFrame.classList.remove('is-active');
+            fullFrame.classList.remove('is-warm');
+          }
+
+          console.error('[shell-fallback] orchestrator failed to boot, lite loaded directly');
+        } catch (error) {
+          console.error('[shell-fallback] failed to load lite fallback', error);
+        }
+      }, 1500);
+    })();
+  </script>
         return;
       }
 
