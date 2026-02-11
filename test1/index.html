@@ -30,26 +30,41 @@
       const fullBase = new URL(ROUTER.fullUrl).toString();
       const readyKey = `cmp_full_ready:${fullBase}`;
 
+      function safeCall(methodName, fn) {
+        if (typeof fn !== 'function') return;
+        try {
+          fn();
+        } catch (err) {
+          console.warn(`[Router] Telegram method ${methodName} is unavailable`, err);
+        }
+      }
+
       function initTelegram() {
         if (!window.Telegram || !Telegram.WebApp) return;
 
-        Telegram.WebApp.ready();
-        Telegram.WebApp.lockOrientation();
-        Telegram.WebApp.enableClosingConfirmation();
+        const app = Telegram.WebApp;
 
-        const initData = Telegram.WebApp.initData;
+        safeCall('ready', () => app.ready());
+        safeCall('lockOrientation', () => app.lockOrientation());
+        safeCall('enableClosingConfirmation', () => app.enableClosingConfirmation());
+
+        const initData = app.initData;
         const params = new URLSearchParams(initData);
         const userData = params.get('user');
 
         if (userData) {
-          const user = JSON.parse(userData);
-          console.log('User ID:', user.id);
+          try {
+            const user = JSON.parse(userData);
+            console.log('User ID:', user.id);
+          } catch (err) {
+            console.warn('[Router] Cannot parse Telegram user data', err);
+          }
         } else {
           console.log('User data not available');
         }
 
-        Telegram.WebApp.requestFullscreen();
-        Telegram.WebApp.disableVerticalSwipes();
+        safeCall('requestFullscreen', () => app.requestFullscreen());
+        safeCall('disableVerticalSwipes', () => app.disableVerticalSwipes());
       }
 
       function route() {
