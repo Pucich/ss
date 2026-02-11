@@ -1,11 +1,16 @@
 (function () {
   const MANIFEST_URL = './builds-manifest.json';
+  const PRELOAD_FORCE_AFTER_MS = 12000;
+  const PRELOAD_LEVEL_FORCE = 5;
+  const SWITCH_GRACE_EXTRA_MS = 6000;
 
   const state = {
     manifest: null,
     preloadStarted: false,
     preloadQueued: false,
     preloadQueueReason: null,
+    preloadQueuedAt: 0,
+    preloadForceTimer: null,
     preloadArmTimer: null,
     preloadRetryTimer: null,
     fullReady: false,
@@ -30,20 +35,23 @@
     localStorage.setItem('handover:known-lite-level', String(state.knownLevel));
   }
 
-  function sendHandoverStateToFull(reason) {
-    persistHandoverLevel();
-
+  function sendMessageToFull(payload) {
     if (!fullFrame.contentWindow) {
       return;
     }
+    fullFrame.contentWindow.postMessage(payload, window.location.origin);
+  }
 
-    fullFrame.contentWindow.postMessage({
+  function sendHandoverStateToFull(reason) {
+    persistHandoverLevel();
+
+    sendMessageToFull({
       type: 'handover-state',
       buildId: 'full',
       reason,
       resumeLevel: getResumeLevel(),
       knownLiteLevel: state.knownLevel
-    }, window.location.origin);
+    });
   }
 
   function safeParseJson(text) {
@@ -83,7 +91,7 @@
     }
 
     if (state.handoverRequested) {
-      completeSwitch();
+      completeSwitch('build-ready');
     }
   }
 
@@ -131,12 +139,31 @@
       state.preloadRetryTimer = null;
     }
 
+    if (state.preloadForceTimer) {
+      clearTimeout(state.preloadForceTimer);
+      state.preloadForceTimer = null;
+    }
+
     state.preloadStarted = true;
     state.preloadQueued = false;
     state.preloadQueueReason = null;
 
     fullFrame.src = `${state.manifest.full.url}${state.manifest.full.url.includes('?') ? '&' : '?'}mode=full&preload=1`;
+    sendHandoverStateToFull(`preload-start:${reason}`);
     console.log('[orchestrator] full preload started:', reason);
+  }
+
+  function scheduleForcedPreloadStart() {
+    if (!state.preloadQueued || state.preloadStarted || state.preloadForceTimer) {
+      return;
+    }
+
+    state.preloadForceTimer = window.setTimeout(() => {
+      state.preloadForceTimer = null;
+      if (!state.preloadStarted) {
+        startFullPreload('queue-deadline');
+      }
+    }, PRELOAD_FORCE_AFTER_MS);
   }
 
   function queueFullPreload(reason) {
@@ -146,6 +173,8 @@
 
     state.preloadQueued = true;
     state.preloadQueueReason = reason;
+    state.preloadQueuedAt = Date.now();
+    scheduleForcedPreloadStart();
     console.log('[orchestrator] full preload queued:', reason);
   }
 
@@ -155,6 +184,11 @@
     }
 
     const queuedReason = state.preloadQueueReason || 'safe-moment';
+    const queuedForMs = Date.now() - state.preloadQueuedAt;
+    if (queuedForMs >= PRELOAD_FORCE_AFTER_MS) {
+      startFullPreload(`${queuedReason}:deadline`);
+      return;
+    }
 
     if (document.visibilityState === 'hidden') {
       startFullPreload(`${queuedReason}:hidden-tab`);
@@ -175,13 +209,13 @@
         }
 
         state.preloadRetryTimer = window.setTimeout(runPreloadWhenSafe, 1200);
-      }, { timeout: 4500 });
+      }, { timeout: 3500 });
       return;
     }
 
     state.preloadRetryTimer = window.setTimeout(() => {
       startFullPreload(`${queuedReason}:fallback`);
-    }, 3000);
+    }, 1800);
   }
 
   function requestSwitchToFull(reason) {
@@ -193,25 +227,35 @@
     state.switchStartedAt = Date.now();
     startFullPreload(`switch:${reason}`);
     sendHandoverStateToFull(`switch:${reason}`);
+    sendMessageToFull({ type: 'handover-activate', buildId: 'full' });
 
     if (state.fullReady) {
-      completeSwitch();
+      completeSwitch('already-ready');
       return;
     }
 
     showOverlay();
     const maxWait = Number(state.manifest.preload?.fallbackSwitchTimeoutMs || 15000);
     state.fallbackTimer = window.setTimeout(() => {
-      completeSwitch();
+      if (state.fullReady) {
+        completeSwitch('fallback-ready');
+        return;
+      }
+
+      console.warn('[orchestrator] switch fallback timeout before full ready; extending grace');
+      state.fallbackTimer = window.setTimeout(() => {
+        completeSwitch('fallback-force');
+      }, SWITCH_GRACE_EXTRA_MS);
     }, maxWait);
   }
 
-  function completeSwitch() {
+  function completeSwitch(reason) {
     if (state.fallbackTimer) {
       clearTimeout(state.fallbackTimer);
       state.fallbackTimer = null;
     }
 
+    sendMessageToFull({ type: 'handover-activate', buildId: 'full', reason: `activate:${reason}` });
     activate('full');
 
     const elapsed = Date.now() - state.switchStartedAt;
@@ -219,6 +263,7 @@
     const hideDelay = elapsed < minMaskMs ? (minMaskMs - elapsed) : 0;
 
     setTimeout(hideOverlay, hideDelay);
+    console.log('[orchestrator] switched to full:', reason, 'in', elapsed, 'ms');
   }
 
   function handleMessage(event) {
@@ -244,6 +289,12 @@
       persistHandoverLevel();
       if (state.preloadStarted) {
         sendHandoverStateToFull('lite-level-update');
+      }
+
+      if (state.knownLevel >= PRELOAD_LEVEL_FORCE) {
+        queueFullPreload('level-force-trigger');
+        startFullPreload('level-force-trigger');
+        return;
       }
 
       if (state.knownLevel >= 3) {
@@ -277,6 +328,7 @@
     }
 
     window.addEventListener('message', handleMessage);
+    document.addEventListener('visibilitychange', runPreloadWhenSafe);
 
     liteFrame.src = `${state.manifest.lite.url}${state.manifest.lite.url.includes('?') ? '&' : '?'}mode=lite`;
 
