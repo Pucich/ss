@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CMP Build Router</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0d0f16;
+      color: #fff;
+      font: 600 16px/1.4 Arial, sans-serif;
+    }
+  </style>
+  <script src="./build-config.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
+</head>
+<body>
+  <div>Подготавливаем игру…</div>
+
+  <script>
+    (function () {
+      const ROUTER = Object.assign({
+        liteUrl: '/2025.12.13_build_cut_SergeyZ/',
+        fullUrl: '/prod_bilds/2025.12.25_new_api_serv/',
+      }, window.CMP_BUILD_CONFIG || {});
+
+      const fullBase = new URL(ROUTER.fullUrl).toString();
+      const readyKey = `cmp_full_ready:${fullBase}`;
+
+      function safeCall(methodName, fn) {
+        if (typeof fn !== 'function') return;
+        try {
+          fn();
+        } catch (err) {
+          console.warn(`[Router] Telegram method ${methodName} is unavailable`, err);
+        }
+      }
+
+      function initTelegram() {
+        if (!window.Telegram || !Telegram.WebApp) return;
+
+        const app = Telegram.WebApp;
+
+        safeCall('ready', () => app.ready());
+        safeCall('lockOrientation', () => app.lockOrientation());
+        safeCall('enableClosingConfirmation', () => app.enableClosingConfirmation());
+
+        const initData = app.initData;
+        const params = new URLSearchParams(initData);
+        const userData = params.get('user');
+
+        if (userData) {
+          try {
+            const user = JSON.parse(userData);
+            console.log('User ID:', user.id);
+          } catch (err) {
+            console.warn('[Router] Cannot parse Telegram user data', err);
+          }
+        } else {
+          console.log('User data not available');
+        }
+
+        safeCall('requestFullscreen', () => app.requestFullscreen());
+        safeCall('disableVerticalSwipes', () => app.disableVerticalSwipes());
+      }
+
+      function route() {
+        const forceLite = new URLSearchParams(window.location.search).get('lite') === '1';
+        const ready = localStorage.getItem(readyKey) === '1';
+
+        if (!forceLite && ready) {
+          window.location.replace(ROUTER.fullUrl);
+          return;
+        }
+
+        window.location.replace(ROUTER.liteUrl);
+      }
+
+      initTelegram();
+      route();
+    })();
+  </script>
+</body>
+</html>
