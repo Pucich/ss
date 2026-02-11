@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Unity WebGL Player | cblocks1</title>
+    <title>ColorBlockGameBot</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
@@ -59,6 +59,7 @@
       const runtimeParams = new URLSearchParams(window.location.search);
       const isPreloadMode = runtimeParams.get('preload') === '1';
       const currentPreloadToken = Number(runtimeParams.get('handoverToken')) || 0;
+      let shellRuntimeInitData = '';
       let sdkLoaded = false;
       let handoverRetryTimer = null;
       let handoverRetryCount = 0;
@@ -215,6 +216,20 @@
           return;
         }
 
+        if (event.data.type === 'shell-runtime') {
+          shellRuntimeInitData = String(event.data.telegramInitData || shellRuntimeInitData || '');
+          if (!window.Telegram) {
+            window.Telegram = {};
+          }
+          if (!window.Telegram.WebApp) {
+            window.Telegram.WebApp = {};
+          }
+          if (!window.Telegram.WebApp.initData && shellRuntimeInitData) {
+            window.Telegram.WebApp.initData = shellRuntimeInitData;
+          }
+          return;
+        }
+
         if (event.data.type === 'handover-activate' && event.data.buildId === 'full') {
           ensureExternalSdkLoaded('handover-activate');
           return;
@@ -311,8 +326,41 @@
 
 	<script>
       (function initTelegramWebAppSafe() {
+        function readParentRuntimeInitData() {
+          try {
+            if (!window.parent || window.parent === window || !window.parent.__CM_ShellRuntime) {
+              return '';
+            }
+            return String(window.parent.__CM_ShellRuntime.telegramInitData || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function applyFallbackToTelegram(initData) {
+          if (!initData) {
+            return;
+          }
+
+          if (!window.Telegram) {
+            window.Telegram = {};
+          }
+
+          if (!window.Telegram.WebApp) {
+            window.Telegram.WebApp = {};
+          }
+
+          const webApp = window.Telegram.WebApp;
+          if (!webApp.initData) {
+            webApp.initData = initData;
+          }
+        }
+
+        shellRuntimeInitData = readParentRuntimeInitData();
+        applyFallbackToTelegram(shellRuntimeInitData);
+
         if (!window.Telegram || !Telegram.WebApp) {
-          console.log('[twa] Telegram WebApp API unavailable');
+          console.log('[twa] Telegram WebApp API unavailable in full');
           return;
         }
 
@@ -325,18 +373,18 @@
         try { webApp.disableVerticalSwipes && webApp.disableVerticalSwipes(); } catch (error) { console.warn('[twa] disableVerticalSwipes failed', error); }
 
         try {
-          const initData = webApp.initData || '';
+          const initData = webApp.initData || shellRuntimeInitData || '';
           const params = new URLSearchParams(initData);
           const userData = params.get('user');
 
           if (!userData) {
-            console.log('[twa] user data not available');
+            console.log('[twa] user data not available in full');
             return;
           }
 
           const user = JSON.parse(userData);
           const userId = user.id;
-          console.log('User ID:', userId);
+          console.log('User ID:', userId, 'source=', webApp.initData ? 'telegram-webapp' : 'shell-runtime');
         } catch (error) {
           console.warn('[twa] initData parse failed', error);
         }

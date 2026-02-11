@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Unity WebGL Player | cblocks1</title>
+    <title>ColorBlockGameBot</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
@@ -148,8 +148,57 @@
 
 	<script>
       (function initTelegramWebAppSafe() {
+        let runtimeInitData = '';
+
+        function readParentRuntimeInitData() {
+          try {
+            if (!window.parent || window.parent === window || !window.parent.__CM_ShellRuntime) {
+              return '';
+            }
+            return String(window.parent.__CM_ShellRuntime.telegramInitData || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function applyFallbackToTelegram(initData) {
+          if (!initData) {
+            return;
+          }
+
+          if (!window.Telegram) {
+            window.Telegram = {};
+          }
+
+          if (!window.Telegram.WebApp) {
+            window.Telegram.WebApp = {};
+          }
+
+          const webApp = window.Telegram.WebApp;
+          if (!webApp.initData) {
+            webApp.initData = initData;
+          }
+        }
+
+        window.addEventListener('message', function(event) {
+          if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+            return;
+          }
+
+          if (event.data.type !== 'shell-runtime') {
+            return;
+          }
+
+          runtimeInitData = String(event.data.telegramInitData || runtimeInitData || '');
+          applyFallbackToTelegram(runtimeInitData);
+        });
+
+        runtimeInitData = readParentRuntimeInitData();
+        applyFallbackToTelegram(runtimeInitData);
+
         if (!window.Telegram || !Telegram.WebApp) {
-          console.log('[twa] Telegram WebApp API unavailable');
+          console.log('[twa] Telegram WebApp API unavailable in lite');
+          window.LogRocket && window.LogRocket.identify('TelegramNotDetected', {});
           return;
         }
 
@@ -163,7 +212,7 @@
         try { webApp.disableVerticalSwipes && webApp.disableVerticalSwipes(); } catch (error) { console.warn('[twa] disableVerticalSwipes failed', error); }
 
         try {
-          const initData = webApp.initData || '';
+          const initData = webApp.initData || runtimeInitData || '';
           const params = new URLSearchParams(initData);
           const userData = params.get('user');
 
@@ -171,9 +220,9 @@
             const user = JSON.parse(userData);
             const userId = user.id;
             logUser = user.username || String(userId);
-            console.log('User ID:', userId);
+            console.log('User ID:', userId, 'source=', webApp.initData ? 'telegram-webapp' : 'shell-runtime');
           } else {
-            console.log('[twa] user data not available');
+            console.log('[twa] user data not available in lite');
           }
         } catch (error) {
           console.warn('[twa] initData parse failed', error);

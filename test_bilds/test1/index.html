@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no" />
-  <title>Lite → Full switch shell</title>
+  <title>ColorBlockGameBot</title>
   <style>
     html, body {
       margin: 0;
@@ -99,8 +99,14 @@
   <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
   <script>
     (function initTelegramWebAppSafe() {
+      const runtime = {
+        telegramInitData: '',
+        telegramInitDataSource: 'missing'
+      };
+
       if (!window.Telegram || !Telegram.WebApp) {
-        console.log('[twa] Telegram WebApp API unavailable');
+        window.__CM_ShellRuntime = runtime;
+        console.log('[twa] Telegram WebApp API unavailable in shell');
         return;
       }
 
@@ -114,20 +120,24 @@
 
       try {
         const initData = webApp.initData || '';
+        runtime.telegramInitData = initData;
+        runtime.telegramInitDataSource = initData ? 'telegram-webapp' : 'missing';
+
         const params = new URLSearchParams(initData);
         const userData = params.get('user');
 
-        if (!userData) {
-          console.log('[twa] user data not available');
-          return;
+        if (userData) {
+          const user = JSON.parse(userData);
+          console.log('User ID:', user.id);
+        } else {
+          console.log('[twa] user data not available in shell');
         }
-
-        const user = JSON.parse(userData);
-        const userId = user.id;
-        console.log('User ID:', userId);
       } catch (error) {
         console.warn('[twa] initData parse failed', error);
       }
+
+      window.__CM_ShellRuntime = runtime;
+      console.log('[twa] shell runtime prepared, source=', runtime.telegramInitDataSource);
     })();
   </script>
 

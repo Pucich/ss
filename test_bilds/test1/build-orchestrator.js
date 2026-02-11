@@ -131,11 +131,28 @@
     safeStorageSet('handover:known-lite-level', String(state.knownLevel));
   }
 
-  function sendMessageToFull(payload) {
-    if (!fullFrame.contentWindow) {
+  function sendMessageToFrame(frame, payload) {
+    if (!frame || !frame.contentWindow) {
       return;
     }
-    fullFrame.contentWindow.postMessage(payload, window.location.origin);
+    frame.contentWindow.postMessage(payload, window.location.origin);
+  }
+
+  function sendMessageToFull(payload) {
+    sendMessageToFrame(fullFrame, payload);
+  }
+
+  function getShellRuntimePayload() {
+    const runtime = window.__CM_ShellRuntime || {};
+    return {
+      type: 'shell-runtime',
+      telegramInitData: runtime.telegramInitData || '',
+      telegramInitDataSource: runtime.telegramInitDataSource || 'missing'
+    };
+  }
+
+  function sendShellRuntimeToFrame(frame) {
+    sendMessageToFrame(frame, getShellRuntimePayload());
   }
 
   function sendHandoverStateToFull(reason) {
@@ -252,6 +269,7 @@
     state.activeFullPreloadToken = state.fullPreloadToken;
 
     fullFrame.src = `${state.manifest.full.url}${state.manifest.full.url.includes('?') ? '&' : '?'}mode=full&preload=1&handoverToken=${state.activeFullPreloadToken}`;
+    window.setTimeout(() => sendShellRuntimeToFrame(fullFrame), 0);
     sendHandoverStateToFull(`preload-start:${reason}`);
     console.log('[orchestrator] full preload started:', reason, 'token=', state.activeFullPreloadToken);
   }
@@ -499,9 +517,13 @@
     window.addEventListener('message', handleMessage);
     document.addEventListener('visibilitychange', runPreloadWhenSafe);
 
+    liteFrame.addEventListener('load', () => sendShellRuntimeToFrame(liteFrame));
+    fullFrame.addEventListener('load', () => sendShellRuntimeToFrame(fullFrame));
+
     const restoreFullOnReload = shouldRestoreFullAfterReload();
 
     liteFrame.src = `${state.manifest.lite.url}${state.manifest.lite.url.includes('?') ? '&' : '?'}mode=lite`;
+    window.setTimeout(() => sendShellRuntimeToFrame(liteFrame), 0);
 
     activate('lite');
     hydrateKnownLiteLevel();
