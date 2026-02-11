@@ -3,6 +3,7 @@
   const PRELOAD_FORCE_AFTER_MS = 12000;
   const PRELOAD_LEVEL_FORCE = 5;
   const SWITCH_GRACE_EXTRA_MS = 6000;
+  const ACTIVE_BUILD_SESSION_KEY = 'handover:active-build-session';
 
   const state = {
     manifest: null,
@@ -87,6 +88,27 @@
     return keys;
   }
 
+
+  const sessionFallback = {};
+
+  function safeSessionGet(key) {
+    try {
+      return sessionStorage.getItem(key);
+    } catch (error) {
+      return Object.prototype.hasOwnProperty.call(sessionFallback, key) ? sessionFallback[key] : null;
+    }
+  }
+
+  function safeSessionSet(key, value) {
+    try {
+      sessionStorage.setItem(key, value);
+      return;
+    } catch (error) {
+      // Ignore sessionStorage unavailability and use in-memory fallback.
+    }
+    sessionFallback[key] = String(value);
+  }
+
   function getResumeLevel() {
     return state.knownLevel > 0 ? (state.knownLevel + 1) : 1;
   }
@@ -138,6 +160,7 @@
     fullFrame.classList.toggle('is-active', !isLite);
     fullFrame.classList.toggle('is-warm', isLite);
     state.active = frameKey;
+    safeSessionSet(ACTIVE_BUILD_SESSION_KEY, frameKey);
   }
 
   function markFullReady() {
@@ -285,6 +308,18 @@
     return state.knownLevel >= requiredLevel;
   }
 
+
+  function hydrateKnownLiteLevel() {
+    const savedLevel = Number(safeStorageGet('handover:known-lite-level')) || 0;
+    if (savedLevel > state.knownLevel) {
+      state.knownLevel = savedLevel;
+    }
+  }
+
+  function shouldRestoreFullAfterReload() {
+    return safeSessionGet(ACTIVE_BUILD_SESSION_KEY) === 'full';
+  }
+
   function requestSwitchToFull(reason) {
     if (state.handoverRequested) {
       return;
@@ -402,10 +437,18 @@
     window.addEventListener('message', handleMessage);
     document.addEventListener('visibilitychange', runPreloadWhenSafe);
 
+    const restoreFullOnReload = shouldRestoreFullAfterReload();
+
     liteFrame.src = `${state.manifest.lite.url}${state.manifest.lite.url.includes('?') ? '&' : '?'}mode=lite`;
 
     activate('lite');
+    hydrateKnownLiteLevel();
     persistHandoverLevel();
+
+    if (restoreFullOnReload) {
+      requestSwitchToFull('reload-restore');
+      return;
+    }
 
     const delay = Number(state.manifest.preload?.triggerDelayMs || 14000);
     state.preloadArmTimer = window.setTimeout(() => {
