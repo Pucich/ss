@@ -138,6 +138,11 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
+  const requestUrl = new URL(e.request.url);
+  if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+
   e.respondWith((async function () {
     const runtimeCache = await caches.open(cacheName);
     let response = await matchByRequestOrUrl(runtimeCache, e.request);

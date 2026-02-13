@@ -373,6 +373,30 @@
     iframe.style.transition = 'opacity 250ms ease';
     iframe.allow = 'autoplay; fullscreen; gamepad; xr-spatial-tracking';
 
+    var settled = false;
+    var fullReadyReceived = false;
+    function finishOverlay(reason) {
+      if (settled) return;
+      settled = true;
+      console.log('[SequentialLoader] full handoff overlay finished:', reason, 'readyReceived=', fullReadyReceived);
+      hideOverlay();
+      window.removeEventListener('message', onMessage);
+    }
+
+    function onMessage(event) {
+      if (!event || event.source !== iframe.contentWindow) return;
+      var data = event.data || {};
+      if (data.type === 'CMP_FULL_READY') {
+        fullReadyReceived = true;
+        finishOverlay('full-ready-message');
+      }
+      if (data.type === 'CMP_FULL_FAILED') {
+        finishOverlay('full-failed-message');
+      }
+    }
+
+    window.addEventListener('message', onMessage);
+
     iframe.onload = function () {
       var liteContainer = document.getElementById('unity-container');
       if (liteContainer) {
@@ -388,36 +412,14 @@
         iframe.style.opacity = '1';
       });
 
-      var settled = false;
-      var fullReadyReceived = false;
-      function finishOverlay(reason) {
-        if (settled) return;
-        settled = true;
-        console.log('[SequentialLoader] full handoff overlay finished:', reason, 'readyReceived=', fullReadyReceived);
-        hideOverlay();
-        window.removeEventListener('message', onMessage);
-      }
-
-      function onMessage(event) {
-        if (!event || event.source !== iframe.contentWindow) return;
-        var data = event.data || {};
-        if (data.type === 'CMP_FULL_READY') {
-          fullReadyReceived = true;
-          finishOverlay('full-ready-message');
-        }
-        if (data.type === 'CMP_FULL_FAILED') {
-          finishOverlay('full-failed-message');
-        }
-      }
-
-      window.addEventListener('message', onMessage);
       setTimeout(function () {
         finishOverlay('iframe-loaded');
       }, 200);
-      setTimeout(function () {
-        finishOverlay('timeout');
-      }, FULL_READY_TIMEOUT_MS);
     };
+
+    setTimeout(function () {
+      finishOverlay('timeout');
+    }, FULL_READY_TIMEOUT_MS);
 
     document.body.appendChild(iframe);
   }
