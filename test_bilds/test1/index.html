@@ -1,136 +1,39 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no" />
-  <title>Lite → Full switch shell</title>
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-    }
-
-    #build-stage {
-      position: fixed;
-      inset: 0;
-      background: #000;
-    }
-
-    .build-frame {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      border: 0;
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity 180ms linear;
-      background: #000;
-    }
-
-    .build-frame.is-active {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      z-index: 2;
-    }
-
-    .build-frame.is-warm {
-      visibility: visible;
-      pointer-events: none;
-      opacity: 0;
-      z-index: 1;
-    }
-
-    #handover-overlay {
-      position: fixed;
-      inset: 0;
-      display: none;
-      z-index: 20;
-      align-items: stretch;
-      justify-content: stretch;
-      background: #000;
-    }
-
-    #handover-overlay.is-visible {
-      display: flex;
-    }
-
-    #handover-image {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    #handover-spinner {
-      position: absolute;
-      right: 18px;
-      bottom: 18px;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      border: 3px solid rgba(255,255,255,.25);
-      border-top-color: #fff;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-  </style>
-</head>
-<body>
-  <main id="build-stage">
-    <iframe id="lite-frame" class="build-frame" title="Lite build" allow="fullscreen"></iframe>
-    <iframe id="full-frame" class="build-frame" title="Full build" allow="fullscreen"></iframe>
-  </main>
-
-  <div id="handover-overlay" aria-live="polite" aria-label="Подготовка полной версии">
-    <img id="handover-image" src="../../for_developers/2025.09.09_testLite_predprenimatel/loading_bg.jpg" alt="" />
-    <span id="handover-spinner" aria-hidden="true"></span>
-  </div>
-
-
-  <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
-  <script>
-    (function initTelegramWebAppSafe() {
-      if (!window.Telegram || !Telegram.WebApp) {
-        console.log('[twa] Telegram WebApp API unavailable');
-        return;
-      }
-
-      const webApp = Telegram.WebApp;
-
-      try { webApp.ready(); } catch (error) { console.warn('[twa] ready failed', error); }
-      try { webApp.lockOrientation && webApp.lockOrientation(); } catch (error) { console.warn('[twa] lockOrientation failed', error); }
-      try { webApp.enableClosingConfirmation && webApp.enableClosingConfirmation(); } catch (error) { console.warn('[twa] closing confirmation failed', error); }
-      try { webApp.requestFullscreen && webApp.requestFullscreen(); } catch (error) { console.warn('[twa] requestFullscreen failed', error); }
-      try { webApp.disableVerticalSwipes && webApp.disableVerticalSwipes(); } catch (error) { console.warn('[twa] disableVerticalSwipes failed', error); }
-
-      try {
-        const initData = webApp.initData || '';
-        const params = new URLSearchParams(initData);
-        const userData = params.get('user');
-
-        if (!userData) {
-          console.log('[twa] user data not available');
-          return;
-        }
-
-        const user = JSON.parse(userData);
-        const userId = user.id;
-        console.log('User ID:', userId);
-      } catch (error) {
-        console.warn('[twa] initData parse failed', error);
-      }
-    })();
-  </script>
-
-  <script src="./build-orchestrator.js"></script>
+<html lang="en-us"> 
+	
+	<script src="https://telegram.org/js/telegram-web-app.js?57"></script>
+	
+	<script>
+		// Init TWA
+		Telegram.WebApp.ready();
+		
+		Telegram.WebApp.lockOrientation();	
+		
+		//Вопрос подтверждения закрытия
+		Telegram.WebApp.enableClosingConfirmation();
+		
+		const initData = Telegram.WebApp.initData;
+		const params = new URLSearchParams(initData);
+		const userData = params.get('user');
+		
+		if (userData) {
+			const user = JSON.parse(userData);
+			const userId = user.id;
+			console.log('User ID:', userId);
+			//alert(userId);
+			} else {
+			console.log('User data not available');
+			//alert("User data not available");
+		}
+		
+		Telegram.WebApp.requestFullscreen();
+		Telegram.WebApp.disableVerticalSwipes();
+		
+	</script>
+	
+	<script language="JavaScript"> 
+		window.location.href = "https://c-m-p.mooo.com/for_developers/2025.09.09_testLite_predprenimatel";
+	</script>
+	
 </body>
 </html>
