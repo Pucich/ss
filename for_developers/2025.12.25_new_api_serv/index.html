@@ -61,17 +61,14 @@
         }
       };
 
-      window.addEventListener("load", function () {
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.register("ServiceWorker.js");
-        }
-      });
-
       var container = document.querySelector("#unity-container");
       var canvas = document.querySelector("#unity-canvas");
       var loadingBar = document.querySelector("#unity-loading-bar");
       var progressBarFull = document.querySelector("#unity-progress-bar-full");
       var warningBanner = document.querySelector("#unity-warning");
+      var fullScopePath = '/for_developers/2025.12.25_new_api_serv/';
+      var runtimeCacheName = 'NGames-cblocks1-webgl_opt_online_high';
+      var prefetchCachePrefix = 'cmp-full-prefetch:';
 
       // Shows a temporary message banner/ribbon for a few seconds, or
       // a permanent error message on top of the canvas if type=='error'.
@@ -95,6 +92,111 @@
           }, 5000);
         }
         updateBannerVisibility();
+      }
+
+      function isFullAssetUrl(rawUrl) {
+        var url = new URL(rawUrl, window.location.href);
+        if (url.origin !== window.location.origin) return false;
+        if (!url.pathname.startsWith(fullScopePath)) return false;
+        return /\/Build\/|\/TemplateData\/|build-manifest\.json$|index\.html$|ServiceWorker\.js$|new\.css$|loading_bg\.jpg$|manifest\.webmanifest$/.test(url.pathname);
+      }
+
+      async function matchPrefetchCaches(request) {
+        try {
+          var keys = await caches.keys();
+          for (var i = 0; i < keys.length; i += 1) {
+            if (!keys[i].startsWith(prefetchCachePrefix)) continue;
+            var cache = await caches.open(keys[i]);
+            var hit = await cache.match(request.url) || await cache.match(request);
+            if (hit) {
+              return hit;
+            }
+          }
+        } catch (e) {
+          console.log('[FullBuild] prefetch cache lookup failed', e);
+        }
+        return null;
+      }
+
+      function installCacheFirstFetchShim() {
+        if (window.__cmpFullFetchShimInstalled) return;
+        window.__cmpFullFetchShimInstalled = true;
+
+        var nativeFetch = window.fetch.bind(window);
+        window.fetch = async function (input, init) {
+          var request = input instanceof Request ? input : new Request(input, init);
+          if (request.method !== 'GET' || !isFullAssetUrl(request.url) || !window.caches) {
+            return nativeFetch(input, init);
+          }
+
+          var runtimeCache = await caches.open(runtimeCacheName);
+          var hit = await runtimeCache.match(request.url) || await runtimeCache.match(request);
+          if (hit) {
+            console.log('[FullBuild] runtime cache hit', request.url);
+            return hit;
+          }
+
+          hit = await matchPrefetchCaches(request);
+          if (hit) {
+            console.log('[FullBuild] prefetch cache hit', request.url);
+            await runtimeCache.put(request, hit.clone());
+            return hit;
+          }
+
+          var response = await nativeFetch(input, init);
+          if (response && response.ok) {
+            await runtimeCache.put(request, response.clone());
+          }
+          return response;
+        };
+      }
+
+      async function ensureServiceWorkerControl() {
+        if (!("serviceWorker" in navigator)) return;
+
+        try {
+          console.log('[FullBuild] sw-register');
+          await navigator.serviceWorker.register("ServiceWorker.js");
+        } catch (e) {
+          console.log('[FullBuild] sw-register failed', e);
+          return;
+        }
+
+        if (navigator.serviceWorker.controller) {
+          console.log('[FullBuild] sw-controlled existing');
+          return;
+        }
+
+        try {
+          await navigator.serviceWorker.ready;
+        } catch (e) {
+          console.log('[FullBuild] sw-ready wait failed', e);
+        }
+
+        if (navigator.serviceWorker.controller) {
+          console.log('[FullBuild] sw-controlled ready');
+          return;
+        }
+
+        await new Promise(function (resolve) {
+          var done = false;
+          function finish() {
+            if (done) return;
+            done = true;
+            resolve();
+          }
+          var timer = setTimeout(finish, 1500);
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            clearTimeout(timer);
+            finish();
+          }, { once: true });
+        });
+
+        if (navigator.serviceWorker.controller) {
+          console.log('[FullBuild] sw-controlled controllerchange');
+        } else {
+          console.log('[FullBuild] sw-control timeout fallback');
+        }
       }
 
       var buildUrl = "Build";
@@ -125,26 +227,33 @@
         document.getElementsByTagName('head')[0].appendChild(meta);
       }
 
-      loadingBar.style.display = "block";
+      async function startFullRuntime() {
+        loadingBar.style.display = "block";
+        installCacheFirstFetchShim();
+        await ensureServiceWorkerControl();
+        console.log('[FullBuild] unity-start');
 
-      var script = document.createElement("script");
-      script.src = loaderUrl;
-      script.onload = () => {
-        createUnityInstance(canvas, config, (progress) => {
-          progressBarFull.style.width = 100 * progress + "%";
-        }).then((unityInstance) => {
-          loadingBar.style.display = "none";
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'CMP_FULL_READY' }, '*');
-          }
-        }).catch((message) => {
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'CMP_FULL_FAILED', message: String(message) }, '*');
-          }
-          alert(message);
-        });
-      };
-      document.body.appendChild(script);
+        var script = document.createElement("script");
+        script.src = loaderUrl;
+        script.onload = () => {
+          createUnityInstance(canvas, config, (progress) => {
+            progressBarFull.style.width = 100 * progress + "%";
+          }).then((unityInstance) => {
+            loadingBar.style.display = "none";
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({ type: 'CMP_FULL_READY' }, '*');
+            }
+          }).catch((message) => {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({ type: 'CMP_FULL_FAILED', message: String(message) }, '*');
+            }
+            alert(message);
+          });
+        };
+        document.body.appendChild(script);
+      }
+
+      startFullRuntime();
     </script>
 	
 	<script src="https://telegram.org/js/telegram-web-app.js?57"></script>
