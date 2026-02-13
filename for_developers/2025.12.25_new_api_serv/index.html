@@ -16,6 +16,9 @@
       <canvas id="unity-canvas" width=1080 height=1920 tabindex="-1"></canvas>
       <div id="unity-loading-bar">
         <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
       </div>
       <div id="unity-warning"> </div>
     </div>
@@ -59,6 +62,7 @@
       var container = document.querySelector("#unity-container");
       var canvas = document.querySelector("#unity-canvas");
       var loadingBar = document.querySelector("#unity-loading-bar");
+      var progressBarFull = document.querySelector("#unity-progress-bar-full");
       var warningBanner = document.querySelector("#unity-warning");
 
       // Shows a temporary message banner/ribbon for a few seconds, or
@@ -86,8 +90,6 @@
       }
 
       var buildUrl = "Build";
-      var monetagSdkUrl = "https://sdk.monetag.ru/sdk.js";
-      var monetagLoadPromise = null;
       var unityStartTs = 0;
       const nativeFetch = window.fetch.bind(window);
       const runtimeCacheName = "NGames-cblocks1-webgl_opt_online_high:2025.12.25";
@@ -118,53 +120,6 @@
           result.push(await caches.open(legacyRuntimeCacheNames[i]));
         }
         return result;
-      }
-
-      function loadMonetagSdkWithTimeout(timeoutMs) {
-        if (monetagLoadPromise) return monetagLoadPromise;
-
-        monetagLoadPromise = new Promise((resolve, reject) => {
-          const existing = document.querySelector('script[data-monetag-sdk="1"]');
-          if (existing) {
-            resolve();
-            return;
-          }
-
-          const script = document.createElement("script");
-          script.src = monetagSdkUrl;
-          script.async = true;
-          script.setAttribute("data-monetag-sdk", "1");
-
-          let timer = setTimeout(() => {
-            timer = null;
-            console.log("sdk-load-timeout", monetagSdkUrl);
-            reject(new Error("monetag-timeout"));
-          }, timeoutMs);
-
-          script.onload = () => {
-            if (timer) {
-              clearTimeout(timer);
-              timer = null;
-            }
-            console.log("sdk-ready", monetagSdkUrl);
-            resolve();
-          };
-
-          script.onerror = () => {
-            if (timer) {
-              clearTimeout(timer);
-              timer = null;
-            }
-            console.log("sdk-load-failed", monetagSdkUrl);
-            reject(new Error("monetag-load-failed"));
-          };
-
-          document.head.appendChild(script);
-        }).catch((err) => {
-          console.log("sdk-load-failed", String(err && err.message ? err.message : err));
-        });
-
-        return monetagLoadPromise;
       }
 
       window.fetch = async function(input, init) {
@@ -288,11 +243,14 @@
         script.onload = () => {
           unityStartTs = performance.now();
           console.log("unity-start");
-          createUnityInstance(canvas, config).then((unityInstance) => {
+          createUnityInstance(canvas, config, (progress) => {
+            if (progressBarFull) {
+              progressBarFull.style.width = 100 * progress + "%";
+            }
+          }).then((unityInstance) => {
             const initMs = Math.round(performance.now() - unityStartTs);
             console.log("unity-instance-created", initMs + "ms");
             loadingBar.style.display = "none";
-            loadMonetagSdkWithTimeout(6000);
             if (window.parent && window.parent !== window) {
               console.log("cmp-full-ready-posted", initMs + "ms");
               window.parent.postMessage({ type: 'CMP_FULL_READY' }, '*');
@@ -345,6 +303,8 @@
       }
 
 	</script>
+
+    <script src="good_loading.js"></script>
   
   </body>
 </html>
