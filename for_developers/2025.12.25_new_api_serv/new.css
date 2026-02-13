@@ -52,15 +52,20 @@
     text-shadow: 1px 2px 1px #1d289c, #1d289c 1px 0px 0px, #1d289c .540302px .841471px 0px, #1d289c -0.416147px .909297px 0px, #1d289c -0.989992px .14112px 0px, #1d289c -0.653644px -0.756802px 0px, #1d289c .283662px -0.958924px 0px, #1d289c .96017px -0.279415px 0px
 }
 
-#unity-progress-bar-full span {
+#unity-progress-percent {
     position: absolute;
-    top: 50%;
     left: 50%;
+    top: 50%;
     -webkit-transform: translate(-50%, -50%);
     -moz-transform: translate(-50%, -50%);
     -ms-transform: translate(-50%, -50%);
     -o-transform: translate(-50%, -50%);
-    transform: translate(-50%, -50%)
+    transform: translate(-50%, -50%);
+    font-weight: bold;
+    font-size: 24px;
+    color: #fff;
+    text-shadow: 1px 2px 1px #1d289c, #1d289c 1px 0px 0px, #1d289c .540302px .841471px 0px, #1d289c -0.416147px .909297px 0px, #1d289c -0.989992px .14112px 0px, #1d289c -0.653644px -0.756802px 0px, #1d289c .283662px -0.958924px 0px, #1d289c .96017px -0.279415px 0px;
+    pointer-events: none;
 }
 
 /* Universal banner container for all ad networks (AdsGram, Monetag, future networks) */

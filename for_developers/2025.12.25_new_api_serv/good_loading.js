@@ -8,6 +8,7 @@
     var realProgress = 0;
     var unityLoaded = false;
     var animationId = null;
+    var progressPercent = document.querySelector('#unity-progress-percent');
     // Этапы прогресса: [целевой %, время в секундах]
     var stages = [
       [40, 5],   // 0-40% за 5 секунд
@@ -37,12 +38,10 @@
       // Обновляем отображение прогресс-бара
       if (progressBarFull) {
         progressBarFull.style.width = displayProgress + '%';
-        let progressSpan = progressBarFull.querySelector('span');
-        if (!progressSpan) {
-          progressSpan = document.createElement('span');
-          progressBarFull.appendChild(progressSpan);
-        }
-        progressSpan.textContent = displayProgress.toFixed() + '%';
+      }
+
+      if (progressPercent) {
+        progressPercent.textContent = displayProgress.toFixed() + '%';
       }
     }
     // Функция анимации фейкового прогресса
@@ -117,6 +116,9 @@
         originalOnProgress(progress);
       }
     };
+    // Рисуем стартовое значение (0%) сразу, без ожидания первого кадра анимации
+    updateProgressBar();
+
     // Запускаем анимацию фейкового прогресса
     requestAnimationFrame(animateFakeProgress);
   })();
