@@ -8,10 +8,10 @@
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
     <!-- AdsGram SDK -->
-    <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+    <script src="https://sad.adsgram.ai/js/sad.min.js" defer></script>
     
     <!-- Monetag SDK -->
-    <script src="https://sdk.monetag.ru/sdk.js"></script>
+    <script src="https://sdk.monetag.ru/sdk.js" defer></script>
   </head>
   <body>
     <div id="unity-container">
@@ -134,7 +134,13 @@
           progressBarFull.style.width = 100 * progress + "%";
         }).then((unityInstance) => {
           loadingBar.style.display = "none";
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'CMP_FULL_READY' }, '*');
+          }
         }).catch((message) => {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'CMP_FULL_FAILED', message: String(message) }, '*');
+          }
           alert(message);
         });
       };

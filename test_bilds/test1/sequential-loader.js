@@ -14,6 +14,7 @@
   var TARGET_SWITCH_LEVEL = 6;
   var READY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   var CACHE_PREFIX = 'cmp-full-prefetch:';
+  var FULL_READY_TIMEOUT_MS = 20000;
   var LEGACY_FULL_RUNTIME_CACHE = 'NGames-cblocks1-webgl_opt_online_high';
 
   var config = null;
@@ -276,7 +277,7 @@
       overlay.style.display = 'flex';
       overlay.style.alignItems = 'center';
       overlay.style.justifyContent = 'center';
-      overlay.style.background = 'rgba(0,0,0,0.72)';
+      overlay.style.background = '#0d0f16 url(/for_developers/2025.09.09_testLite_predprenimatel/loading_bg.jpg) center / cover no-repeat';
       overlay.style.color = '#fff';
       overlay.style.font = '600 18px/1.4 Arial, sans-serif';
       overlay.style.zIndex = '2147483647';
@@ -338,9 +339,30 @@
         iframe.style.opacity = '1';
       });
 
-      setTimeout(function () {
+      var settled = false;
+      function finishOverlay(reason) {
+        if (settled) return;
+        settled = true;
+        console.log('[SequentialLoader] full handoff overlay finished:', reason);
         hideOverlay();
-      }, 300);
+        window.removeEventListener('message', onMessage);
+      }
+
+      function onMessage(event) {
+        if (!event || event.source !== iframe.contentWindow) return;
+        var data = event.data || {};
+        if (data.type === 'CMP_FULL_READY') {
+          finishOverlay('full-ready-message');
+        }
+        if (data.type === 'CMP_FULL_FAILED') {
+          finishOverlay('full-failed-message');
+        }
+      }
+
+      window.addEventListener('message', onMessage);
+      setTimeout(function () {
+        finishOverlay('timeout');
+      }, FULL_READY_TIMEOUT_MS);
     };
 
     document.body.appendChild(iframe);
