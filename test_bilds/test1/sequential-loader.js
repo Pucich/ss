@@ -9,12 +9,12 @@
   };
 
   var PREFETCH_DELAY_MS = 10000;
-  var SWITCH_OVERLAY_MS = 1200;
+  var SWITCH_OVERLAY_MS = 200;
   var PREFETCH_CONCURRENCY = 2;
   var TARGET_SWITCH_LEVEL = 6;
   var READY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   var CACHE_PREFIX = 'cmp-full-prefetch:';
-  var FULL_READY_TIMEOUT_MS = 20000;
+  var FULL_READY_TIMEOUT_MS = 12000;
   var FULL_RUNTIME_CACHE = 'NGames-cblocks1-webgl_opt_online_high:2025.12.25';
   var LEGACY_FULL_RUNTIME_CACHE = 'NGames-cblocks1-webgl_opt_online_high';
 
@@ -411,6 +411,9 @@
       }
 
       window.addEventListener('message', onMessage);
+      setTimeout(function () {
+        finishOverlay('iframe-loaded');
+      }, 200);
       setTimeout(function () {
         finishOverlay('timeout');
       }, FULL_READY_TIMEOUT_MS);
