@@ -27,6 +27,7 @@
   var overlayProgressTimer = null;
   var overlayProgressValue = 12;
   var overlayProgressDirection = 1;
+  var fullSwitchStarted = false;
 
   function normalizeBaseUrl(url) {
     if (!url) return '/';
@@ -427,6 +428,11 @@
   function switchToFull(reason) {
     if (!config) return;
 
+    if (fullSwitchStarted) {
+      console.log('[SequentialLoader] handoff already started, skip duplicate switch');
+      return;
+    }
+
     if (highestReachedLevel < config.targetSwitchLevel) {
       console.log('[SequentialLoader] handoff blocked: level gate not reached', highestReachedLevel, '<', config.targetSwitchLevel);
       return;
@@ -435,6 +441,8 @@
     var target = fullIndexUrl(config);
     var ready = isReadyState(config);
     console.log('[SequentialLoader] gameover switch, reason =', reason, 'ready =', ready, 'mode=iframe');
+
+    fullSwitchStarted = true;
 
     if (ready) {
       mountFullIframe(target);
@@ -445,6 +453,20 @@
     setTimeout(function () {
       mountFullIframe(target);
     }, SWITCH_OVERLAY_MS);
+  }
+
+  function autoLaunchFullIfReady() {
+    if (!config) return false;
+    if (fullSwitchStarted) return true;
+
+    var ready = isReadyState(config);
+    if (!ready) return false;
+
+    fullSwitchStarted = true;
+    highestReachedLevel = Math.max(highestReachedLevel, config.targetSwitchLevel);
+    console.log('[SequentialLoader] startup autolaunch: ready state detected, opening full build');
+    mountFullIframe(fullIndexUrl(config));
+    return true;
   }
 
   function extractLevelFromConsoleArgs(argsLike) {
@@ -575,6 +597,7 @@
   async function init() {
     config = await loadBuildConfig();
     await preparePrefetchPolicy(config);
+    autoLaunchFullIfReady();
     installTimerTrigger();
     installLevelTrigger();
     installConsoleLevelBridge();
