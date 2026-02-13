@@ -388,10 +388,11 @@
       });
 
       var settled = false;
+      var fullReadyReceived = false;
       function finishOverlay(reason) {
         if (settled) return;
         settled = true;
-        console.log('[SequentialLoader] full handoff overlay finished:', reason);
+        console.log('[SequentialLoader] full handoff overlay finished:', reason, 'readyReceived=', fullReadyReceived);
         hideOverlay();
         window.removeEventListener('message', onMessage);
       }
@@ -400,6 +401,7 @@
         if (!event || event.source !== iframe.contentWindow) return;
         var data = event.data || {};
         if (data.type === 'CMP_FULL_READY') {
+          fullReadyReceived = true;
           finishOverlay('full-ready-message');
         }
         if (data.type === 'CMP_FULL_FAILED') {

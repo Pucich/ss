@@ -1,20 +1,56 @@
 const cacheName = "NGames-cblocks1-webgl_opt_online_high";
 const prefetchCachePrefix = "cmp-full-prefetch:";
-const contentToCache = [
+const shellContentToCache = [
   "Build/2025.12.25_new_api_serv.loader.js",
-  "Build/2025.12.25_new_api_serv.framework.js.br",
-  "Build/2025.12.25_new_api_serv.data.br",
-  "Build/2025.12.25_new_api_serv.wasm.br",
   "TemplateData/style.css"
 ];
+const heavyBuildAssets = [
+  "Build/2025.12.25_new_api_serv.framework.js.br",
+  "Build/2025.12.25_new_api_serv.data.br",
+  "Build/2025.12.25_new_api_serv.wasm.br"
+];
+
+function toAbsolute(path) {
+  return new URL(path, self.location.origin).toString();
+}
+
+async function matchByRequestOrUrl(cache, requestOrUrl) {
+  const request = typeof requestOrUrl === 'string' ? new Request(requestOrUrl) : requestOrUrl;
+  return (await cache.match(request)) || (await cache.match(request.url));
+}
 
 self.addEventListener('install', function (e) {
   console.log('[Service Worker] Install');
 
   e.waitUntil((async function () {
-    const cache = await caches.open(cacheName);
+    const runtimeCache = await caches.open(cacheName);
     console.log('[Service Worker] Caching all: app shell and content');
-    await cache.addAll(contentToCache);
+
+    await runtimeCache.addAll(shellContentToCache);
+
+    for (const relativePath of heavyBuildAssets) {
+      const absoluteUrl = toAbsolute(relativePath);
+
+      const runtimeHit = await matchByRequestOrUrl(runtimeCache, absoluteUrl);
+      if (runtimeHit) {
+        console.log('[Service Worker] install-hit-runtime', absoluteUrl);
+        continue;
+      }
+
+      const prefetchHit = await matchPrefetchCache(absoluteUrl);
+      if (prefetchHit) {
+        console.log('[Service Worker] install-hit-prefetch', absoluteUrl);
+        await runtimeCache.put(absoluteUrl, prefetchHit.clone());
+        continue;
+      }
+
+      console.log('[Service Worker] install-network', absoluteUrl);
+      const networkResponse = await fetch(absoluteUrl, { credentials: 'same-origin' });
+      if (networkResponse.ok) {
+        await runtimeCache.put(absoluteUrl, networkResponse.clone());
+      }
+    }
+
     await self.skipWaiting();
   })());
 });
@@ -23,12 +59,13 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(self.clients.claim());
 });
 
-async function matchPrefetchCache(request) {
+async function matchPrefetchCache(requestOrUrl) {
+  const request = typeof requestOrUrl === 'string' ? new Request(requestOrUrl) : requestOrUrl;
   const keys = await caches.keys();
   for (const key of keys) {
     if (!key.startsWith(prefetchCachePrefix)) continue;
     const cache = await caches.open(key);
-    const hit = await cache.match(request.url) || await cache.match(request);
+    const hit = await matchByRequestOrUrl(cache, request);
     if (hit) {
       console.log(`[Service Worker] Prefetch cache hit: ${request.url} from ${key}`);
       return hit;
@@ -43,7 +80,7 @@ self.addEventListener('fetch', function (e) {
   }
 
   e.respondWith((async function () {
-    let response = await caches.match(e.request);
+    let response = (await caches.match(e.request)) || (await caches.match(e.request.url));
     if (response) {
       return response;
     }
@@ -57,7 +94,7 @@ self.addEventListener('fetch', function (e) {
 
     response = await fetch(e.request);
     const cache = await caches.open(cacheName);
-    cache.put(e.request, response.clone());
+    cache.put(e.request.url, response.clone());
     return response;
   })());
 });

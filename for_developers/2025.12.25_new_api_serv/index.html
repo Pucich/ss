@@ -104,6 +104,14 @@
         );
       }
 
+      function toAbsoluteUrl(urlLike) {
+        return new URL(urlLike, window.location.origin).toString();
+      }
+
+      async function matchCacheByRequestOrUrl(cache, request) {
+        return (await cache.match(request)) || (await cache.match(request.url));
+      }
+
       window.fetch = async function(input, init) {
         var request = input instanceof Request ? input : new Request(input, init);
 
@@ -116,14 +124,15 @@
           return nativeFetch(input, init);
         }
 
+        console.log("cache-key", request.url, toAbsoluteUrl(request.url));
         var runtimeCache = await caches.open(runtimeCacheName);
-        var cachedResponse = await runtimeCache.match(request);
+        var cachedResponse = await matchCacheByRequestOrUrl(runtimeCache, request);
         if (!cachedResponse) {
           var cacheNames = await caches.keys();
           var prefetchCaches = cacheNames.filter((name) => name.startsWith("cmp-full-prefetch:"));
           for (var i = 0; i < prefetchCaches.length; i++) {
             var prefetchCache = await caches.open(prefetchCaches[i]);
-            cachedResponse = await prefetchCache.match(request);
+            cachedResponse = await matchCacheByRequestOrUrl(prefetchCache, request);
             if (cachedResponse) break;
           }
         }
@@ -136,7 +145,7 @@
         console.log("network-fallback", request.url);
         var networkResponse = await nativeFetch(input, init);
         if (networkResponse && networkResponse.ok) {
-          await runtimeCache.put(request, networkResponse.clone());
+          await runtimeCache.put(request.url, networkResponse.clone());
         }
         return networkResponse;
       };
@@ -204,6 +213,7 @@
       }
 
       async function startUnity() {
+        console.log("handoff-start");
         await waitForServiceWorkerControl(4000);
 
         var script = document.createElement("script");
@@ -213,6 +223,7 @@
           createUnityInstance(canvas, config, (progress) => {
             progressBarFull.style.width = 100 * progress + "%";
           }).then((unityInstance) => {
+            console.log("unity-instance-created");
             loadingBar.style.display = "none";
             if (window.parent && window.parent !== window) {
               window.parent.postMessage({ type: 'CMP_FULL_READY' }, '*');
@@ -233,30 +244,36 @@
 	<script src="https://telegram.org/js/telegram-web-app.js?57"></script>
 
 	<script>
-      // Init TWA
-    Telegram.WebApp.ready();
+      function safeTgCall(label, fn) {
+        try {
+          if (typeof fn === 'function') {
+            fn();
+          }
+        } catch (e) {
+          console.log('tg-unsupported', label, e && e.message ? e.message : e);
+        }
+      }
 
-	Telegram.WebApp.lockOrientation();	
-	
-	//Вопрос подтверждения закрытия
-	Telegram.WebApp.enableClosingConfirmation();
+      if (window.Telegram && Telegram.WebApp) {
+        safeTgCall('ready', () => Telegram.WebApp.ready());
+        safeTgCall('lockOrientation', () => Telegram.WebApp.lockOrientation());
+        safeTgCall('enableClosingConfirmation', () => Telegram.WebApp.enableClosingConfirmation());
 
-	const initData = Telegram.WebApp.initData;
-	const params = new URLSearchParams(initData);
-	const userData = params.get('user');
+        const initData = Telegram.WebApp.initData || '';
+        const params = new URLSearchParams(initData);
+        const userData = params.get('user');
 
-	if (userData) {
-	  const user = JSON.parse(userData);
-	  const userId = user.id;
-	  console.log('User ID:', userId);
-	//alert(userId);
-	} else {
-	  console.log('User data not available');
-	alert("User data not available");
-	}
-	
-	Telegram.WebApp.requestFullscreen();
-	Telegram.WebApp.disableVerticalSwipes();
+        if (userData) {
+          const user = JSON.parse(userData);
+          const userId = user.id;
+          console.log('User ID:', userId);
+        } else {
+          console.log('User data not available');
+        }
+
+        safeTgCall('requestFullscreen', () => Telegram.WebApp.requestFullscreen());
+        safeTgCall('disableVerticalSwipes', () => Telegram.WebApp.disableVerticalSwipes());
+      }
 
 	</script>
   
