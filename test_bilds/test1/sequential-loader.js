@@ -26,7 +26,37 @@
   var timerId = null;
   var overlayProgressTimer = null;
   var overlayProgressValue = 12;
-  var overlayProgressDirection = 1;
+  var overlayProgressAnimationStartTs = 0;
+  var overlayProgressStages = [
+    [40, 5],
+    [60, 5],
+    [85, 6],
+    [92, 8],
+    [97, 8],
+    [99, 12],
+    [99, Infinity]
+  ];
+
+  function unlockedKey(cfg) {
+    return 'cmp:full-unlocked:' + cfg.fullBaseUrl + ':' + cfg.fullVersion;
+  }
+
+  function markFullUnlocked(cfg) {
+    try {
+      localStorage.setItem(unlockedKey(cfg), '1');
+    } catch (e) {
+      console.log('[SequentialLoader] failed to persist full unlock', e);
+    }
+  }
+
+  function isFullUnlocked(cfg) {
+    try {
+      return localStorage.getItem(unlockedKey(cfg)) === '1';
+    } catch (e) {
+      console.log('[SequentialLoader] failed to read full unlock', e);
+      return false;
+    }
+  }
 
   function normalizeBaseUrl(url) {
     if (!url) return '/';
@@ -275,15 +305,34 @@
     if (!progressBar) return;
     if (overlayProgressTimer) return;
 
+    overlayProgressAnimationStartTs = Date.now();
+
     overlayProgressTimer = setInterval(function () {
-      overlayProgressValue += overlayProgressDirection * 1.2;
-      if (overlayProgressValue >= 92) {
-        overlayProgressValue = 92;
-        overlayProgressDirection = -1;
-      } else if (overlayProgressValue <= 12) {
-        overlayProgressValue = 12;
-        overlayProgressDirection = 1;
+      var elapsed = (Date.now() - overlayProgressAnimationStartTs) / 1000;
+      var totalDuration = 0;
+      var startValue = 12;
+      var stageTarget = 99;
+      var stageDuration = Infinity;
+
+      for (var i = 0; i < overlayProgressStages.length; i += 1) {
+        var stage = overlayProgressStages[i];
+        stageTarget = stage[0];
+        stageDuration = stage[1];
+        if (i === overlayProgressStages.length - 1 || elapsed <= totalDuration + stageDuration) {
+          break;
+        }
+        totalDuration += stageDuration;
+        startValue = stageTarget;
       }
+
+      if (stageDuration === Infinity) {
+        overlayProgressValue = stageTarget;
+      } else {
+        var stageElapsed = Math.max(0, elapsed - totalDuration);
+        var stageProgress = Math.min(stageElapsed / stageDuration, 1);
+        overlayProgressValue = startValue + (stageTarget - startValue) * stageProgress;
+      }
+
       progressBar.style.width = overlayProgressValue.toFixed(1) + '%';
     }, 60);
   }
@@ -424,13 +473,15 @@
     document.body.appendChild(iframe);
   }
 
-  function switchToFull(reason) {
+  function switchToFull(reason, forceByUnlock) {
     if (!config) return;
 
-    if (highestReachedLevel < config.targetSwitchLevel) {
+    if (!forceByUnlock && highestReachedLevel < config.targetSwitchLevel) {
       console.log('[SequentialLoader] handoff blocked: level gate not reached', highestReachedLevel, '<', config.targetSwitchLevel);
       return;
     }
+
+    markFullUnlocked(config);
 
     var target = fullIndexUrl(config);
     var ready = isReadyState(config);
@@ -575,6 +626,13 @@
   async function init() {
     config = await loadBuildConfig();
     await preparePrefetchPolicy(config);
+
+    if (isFullUnlocked(config)) {
+      console.log('[SequentialLoader] full unlocked ранее, запускаем сразу full');
+      switchToFull('persisted-full-unlock', true);
+      return;
+    }
+
     installTimerTrigger();
     installLevelTrigger();
     installConsoleLevelBridge();
