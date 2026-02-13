@@ -92,6 +92,7 @@
       var buildUrl = "Build";
       var monetagSdkUrl = "https://sdk.monetag.ru/sdk.js";
       var monetagLoadPromise = null;
+      var unityStartTs = 0;
       const nativeFetch = window.fetch.bind(window);
       const runtimeCacheName = "NGames-cblocks1-webgl_opt_online_high:2025.12.25";
       const legacyRuntimeCacheNames = ["NGames-cblocks1-webgl_opt_online_high"];
@@ -289,14 +290,17 @@
         var script = document.createElement("script");
         script.src = loaderUrl;
         script.onload = () => {
+          unityStartTs = performance.now();
           console.log("unity-start");
           createUnityInstance(canvas, config, (progress) => {
             progressBarFull.style.width = 100 * progress + "%";
           }).then((unityInstance) => {
-            console.log("unity-instance-created");
+            const initMs = Math.round(performance.now() - unityStartTs);
+            console.log("unity-instance-created", initMs + "ms");
             loadingBar.style.display = "none";
             loadMonetagSdkWithTimeout(6000);
             if (window.parent && window.parent !== window) {
+              console.log("cmp-full-ready-posted", initMs + "ms");
               window.parent.postMessage({ type: 'CMP_FULL_READY' }, '*');
             }
           }).catch((message) => {
@@ -348,7 +352,5 @@
 
 	</script>
   
-<script src="good_loading.js"></script>
-	
   </body>
 </html>
