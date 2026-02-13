@@ -10,8 +10,6 @@
     <!-- AdsGram SDK -->
     <script src="https://sad.adsgram.ai/js/sad.min.js" defer></script>
     
-    <!-- Monetag SDK -->
-    <script src="https://sdk.monetag.ru/sdk.js" defer></script>
   </head>
   <body>
     <div id="unity-container">
@@ -92,8 +90,11 @@
       }
 
       var buildUrl = "Build";
+      var monetagSdkUrl = "https://sdk.monetag.ru/sdk.js";
+      var monetagLoadPromise = null;
       const nativeFetch = window.fetch.bind(window);
-      const runtimeCacheName = "NGames-cblocks1-webgl_opt_online_high";
+      const runtimeCacheName = "NGames-cblocks1-webgl_opt_online_high:2025.12.25";
+      const legacyRuntimeCacheNames = ["NGames-cblocks1-webgl_opt_online_high"];
       const currentScopePath = new URL(".", window.location.href).pathname;
 
       function isFullAssetRequest(url) {
@@ -113,6 +114,62 @@
         return (await cache.match(request)) || (await cache.match(request.url));
       }
 
+      async function getRuntimeCaches() {
+        const result = [];
+        result.push(await caches.open(runtimeCacheName));
+        for (let i = 0; i < legacyRuntimeCacheNames.length; i++) {
+          result.push(await caches.open(legacyRuntimeCacheNames[i]));
+        }
+        return result;
+      }
+
+      function loadMonetagSdkWithTimeout(timeoutMs) {
+        if (monetagLoadPromise) return monetagLoadPromise;
+
+        monetagLoadPromise = new Promise((resolve, reject) => {
+          const existing = document.querySelector('script[data-monetag-sdk="1"]');
+          if (existing) {
+            resolve();
+            return;
+          }
+
+          const script = document.createElement("script");
+          script.src = monetagSdkUrl;
+          script.async = true;
+          script.setAttribute("data-monetag-sdk", "1");
+
+          let timer = setTimeout(() => {
+            timer = null;
+            console.log("sdk-load-timeout", monetagSdkUrl);
+            reject(new Error("monetag-timeout"));
+          }, timeoutMs);
+
+          script.onload = () => {
+            if (timer) {
+              clearTimeout(timer);
+              timer = null;
+            }
+            console.log("sdk-ready", monetagSdkUrl);
+            resolve();
+          };
+
+          script.onerror = () => {
+            if (timer) {
+              clearTimeout(timer);
+              timer = null;
+            }
+            console.log("sdk-load-failed", monetagSdkUrl);
+            reject(new Error("monetag-load-failed"));
+          };
+
+          document.head.appendChild(script);
+        }).catch((err) => {
+          console.log("sdk-load-failed", String(err && err.message ? err.message : err));
+        });
+
+        return monetagLoadPromise;
+      }
+
       window.fetch = async function(input, init) {
         var request = input instanceof Request ? input : new Request(input, init);
 
@@ -128,8 +185,18 @@
         if (/\.(data\.br|wasm\.br|framework\.js\.br)$/.test(requestUrl.pathname)) {
           console.log("cache-key", request.url, toAbsoluteUrl(request.url));
         }
-        var runtimeCache = await caches.open(runtimeCacheName);
-        var cachedResponse = await matchCacheByRequestOrUrl(runtimeCache, request);
+        const runtimeCaches = await getRuntimeCaches();
+        let runtimeCache = runtimeCaches[0];
+        var cachedResponse = null;
+        for (let i = 0; i < runtimeCaches.length; i++) {
+          cachedResponse = await matchCacheByRequestOrUrl(runtimeCaches[i], request);
+          if (cachedResponse) {
+            if (i > 0) {
+              await runtimeCache.put(request.url, cachedResponse.clone());
+            }
+            break;
+          }
+        }
         if (!cachedResponse) {
           var cacheNames = await caches.keys();
           var prefetchCaches = cacheNames.filter((name) => name.startsWith("cmp-full-prefetch:"));
@@ -228,6 +295,7 @@
           }).then((unityInstance) => {
             console.log("unity-instance-created");
             loadingBar.style.display = "none";
+            loadMonetagSdkWithTimeout(6000);
             if (window.parent && window.parent !== window) {
               window.parent.postMessage({ type: 'CMP_FULL_READY' }, '*');
             }

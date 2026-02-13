@@ -1,4 +1,7 @@
-const cacheName = "NGames-cblocks1-webgl_opt_online_high";
+const cacheName = "NGames-cblocks1-webgl_opt_online_high:2025.12.25";
+const legacyRuntimeCaches = [
+  "NGames-cblocks1-webgl_opt_online_high"
+];
 const prefetchCachePrefix = "cmp-full-prefetch:";
 const shellContentToCache = [
   "Build/2025.12.25_new_api_serv.loader.js",
@@ -19,6 +22,32 @@ async function matchByRequestOrUrl(cache, requestOrUrl) {
   return (await cache.match(request)) || (await cache.match(request.url));
 }
 
+async function matchInRuntimeCaches(requestOrUrl) {
+  const runtimeCache = await caches.open(cacheName);
+  const currentHit = await matchByRequestOrUrl(runtimeCache, requestOrUrl);
+  if (currentHit) {
+    return currentHit;
+  }
+
+  for (const legacyName of legacyRuntimeCaches) {
+    const legacyCache = await caches.open(legacyName);
+    const legacyHit = await matchByRequestOrUrl(legacyCache, requestOrUrl);
+    if (legacyHit) {
+      return legacyHit;
+    }
+  }
+
+  return null;
+}
+
+async function pruneCacheByScope(cacheHandle, scopePrefix) {
+  const requests = await cacheHandle.keys();
+  await Promise.all(requests.map(async (req) => {
+    if (!req || !req.url || req.url.startsWith(scopePrefix)) return;
+    await cacheHandle.delete(req);
+  }));
+}
+
 self.addEventListener('install', function (e) {
   console.log('[Service Worker] Install');
 
@@ -31,9 +60,10 @@ self.addEventListener('install', function (e) {
     for (const relativePath of heavyBuildAssets) {
       const absoluteUrl = toAbsolute(relativePath);
 
-      const runtimeHit = await matchByRequestOrUrl(runtimeCache, absoluteUrl);
+      const runtimeHit = await matchInRuntimeCaches(absoluteUrl);
       if (runtimeHit) {
         console.log('[Service Worker] install-hit-runtime', absoluteUrl);
+        await runtimeCache.put(absoluteUrl, runtimeHit.clone());
         continue;
       }
 
@@ -52,7 +82,18 @@ self.addEventListener('install', function (e) {
 });
 
 self.addEventListener('activate', function (e) {
-  e.waitUntil(self.clients.claim());
+  e.waitUntil((async function () {
+    const scopePrefix = self.registration.scope;
+    const currentRuntime = await caches.open(cacheName);
+    await pruneCacheByScope(currentRuntime, scopePrefix);
+
+    for (const legacyName of legacyRuntimeCaches) {
+      const legacyCache = await caches.open(legacyName);
+      await pruneCacheByScope(legacyCache, scopePrefix);
+    }
+
+    await self.clients.claim();
+  })());
 });
 
 
@@ -98,14 +139,25 @@ self.addEventListener('fetch', function (e) {
   }
 
   e.respondWith((async function () {
-    let response = (await caches.match(e.request)) || (await caches.match(e.request.url));
+    const runtimeCache = await caches.open(cacheName);
+    let response = await matchByRequestOrUrl(runtimeCache, e.request);
+    if (!response) {
+      for (const legacyName of legacyRuntimeCaches) {
+        const legacyCache = await caches.open(legacyName);
+        response = await matchByRequestOrUrl(legacyCache, e.request);
+        if (response) {
+          await runtimeCache.put(e.request.url, response.clone());
+          break;
+        }
+      }
+    }
+
     if (response) {
       return response;
     }
 
     response = await matchPrefetchCache(e.request);
     if (response) {
-      const runtimeCache = await caches.open(cacheName);
       runtimeCache.put(e.request, response.clone());
       return response;
     }

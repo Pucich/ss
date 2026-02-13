@@ -15,6 +15,7 @@
   var READY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   var CACHE_PREFIX = 'cmp-full-prefetch:';
   var FULL_READY_TIMEOUT_MS = 20000;
+  var FULL_RUNTIME_CACHE = 'NGames-cblocks1-webgl_opt_online_high:2025.12.25';
   var LEGACY_FULL_RUNTIME_CACHE = 'NGames-cblocks1-webgl_opt_online_high';
 
   var config = null;
@@ -40,7 +41,7 @@
       fullVersion: seqCfg.fullVersion || baseConfig.fullVersion || DEFAULT_CONFIG.fullVersion,
       manifestPath: seqCfg.manifestPath || baseConfig.manifestPath || DEFAULT_CONFIG.manifestPath,
       targetSwitchLevel: Number(seqCfg.targetSwitchLevel || baseConfig.targetSwitchLevel || TARGET_SWITCH_LEVEL),
-      fullRuntimeCaches: Array.isArray(seqCfg.fullRuntimeCaches) ? seqCfg.fullRuntimeCaches.slice() : [LEGACY_FULL_RUNTIME_CACHE]
+      fullRuntimeCaches: Array.isArray(seqCfg.fullRuntimeCaches) ? seqCfg.fullRuntimeCaches.slice() : [FULL_RUNTIME_CACHE, LEGACY_FULL_RUNTIME_CACHE]
     };
 
     return merged;
