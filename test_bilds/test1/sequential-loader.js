@@ -14,6 +14,7 @@
   var TARGET_SWITCH_LEVEL = 6;
   var READY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   var CACHE_PREFIX = 'cmp-full-prefetch:';
+  var LEGACY_FULL_RUNTIME_CACHE = 'NGames-cblocks1-webgl_opt_online_high';
 
   var config = null;
   var prefetchPromise = null;
@@ -34,7 +35,8 @@
       fullBaseUrl: normalizeBaseUrl(seqCfg.fullBaseUrl || baseConfig.fullBaseUrl || DEFAULT_CONFIG.fullBaseUrl),
       fullVersion: seqCfg.fullVersion || baseConfig.fullVersion || DEFAULT_CONFIG.fullVersion,
       manifestPath: seqCfg.manifestPath || baseConfig.manifestPath || DEFAULT_CONFIG.manifestPath,
-      targetSwitchLevel: Number(seqCfg.targetSwitchLevel || baseConfig.targetSwitchLevel || TARGET_SWITCH_LEVEL)
+      targetSwitchLevel: Number(seqCfg.targetSwitchLevel || baseConfig.targetSwitchLevel || TARGET_SWITCH_LEVEL),
+      fullRuntimeCaches: Array.isArray(seqCfg.fullRuntimeCaches) ? seqCfg.fullRuntimeCaches.slice() : [LEGACY_FULL_RUNTIME_CACHE]
     };
 
     return merged;
@@ -141,9 +143,35 @@
     return toAbsolute(cfg.fullBaseUrl + relativePath.replace(/^\/+/, ''));
   }
 
-  async function fetchAndStore(url, cache) {
-    if (cache) {
-      var existing = await cache.match(url);
+  async function buildTargetCaches(cfg) {
+    var list = [];
+    if (!window.caches || typeof window.caches.open !== 'function') return list;
+
+    try {
+      list.push(await caches.open(cacheNameFor(cfg)));
+    } catch (e) {
+      console.log('[SequentialLoader] failed to open sequential cache', e);
+    }
+
+    var runtimeNames = Array.isArray(cfg.fullRuntimeCaches) ? cfg.fullRuntimeCaches : [];
+    for (var i = 0; i < runtimeNames.length; i += 1) {
+      var runtimeName = runtimeNames[i];
+      if (!runtimeName || typeof runtimeName !== 'string') continue;
+      try {
+        list.push(await caches.open(runtimeName));
+      } catch (e) {
+        console.log('[SequentialLoader] failed to open runtime cache ' + runtimeName, e);
+      }
+    }
+
+    return list;
+  }
+
+  async function fetchAndStore(url, targetCaches) {
+    var cachesList = Array.isArray(targetCaches) ? targetCaches : [];
+
+    for (var i = 0; i < cachesList.length; i += 1) {
+      var existing = await cachesList[i].match(url);
       if (existing) {
         return;
       }
@@ -154,8 +182,10 @@
       throw new Error('HTTP ' + response.status + ' for ' + url);
     }
 
-    if (cache) {
-      await cache.put(url, response.clone());
+    if (cachesList.length) {
+      for (var j = 0; j < cachesList.length; j += 1) {
+        await cachesList[j].put(url, response.clone());
+      }
     } else {
       // Fallback path: consume body to ensure resource is downloaded.
       await response.arrayBuffer();
@@ -194,22 +224,16 @@
     prefetchPromise = (async function () {
       writeState(config, 'prefetching', trigger);
 
-      var cache = null;
-      var cacheName = cacheNameFor(config);
+      var targetCaches = [];
       if (window.caches && typeof window.caches.open === 'function') {
-        try {
-          cache = await caches.open(cacheName);
-        } catch (e) {
-          console.log('[SequentialLoader] Cache API open failed, fallback to fetch-only', e);
-          cache = null;
-        }
+        targetCaches = await buildTargetCaches(config);
       } else {
         console.log('[SequentialLoader] Cache API unavailable, fallback to fetch-only');
       }
 
       try {
         var indexUrl = fullIndexUrl(config);
-        await fetchAndStore(indexUrl, cache);
+        await fetchAndStore(indexUrl, targetCaches);
 
         var manifestUrl = fullManifestUrl(config);
         var manifestResponse = await fetch(manifestUrl, { credentials: 'same-origin' });
@@ -218,15 +242,17 @@
         }
 
         var manifestData = await manifestResponse.json();
-        if (cache) {
-          await cache.put(manifestUrl, new Response(JSON.stringify(manifestData), {
-            headers: { 'Content-Type': 'application/json' }
-          }));
+        if (targetCaches.length) {
+          for (var c = 0; c < targetCaches.length; c += 1) {
+            await targetCaches[c].put(manifestUrl, new Response(JSON.stringify(manifestData), {
+              headers: { 'Content-Type': 'application/json' }
+            }));
+          }
         }
 
         var files = Array.isArray(manifestData.files) ? manifestData.files.slice() : [];
         await runWithConcurrency(files, function (relativePath) {
-          return fetchAndStore(fullFileUrl(config, relativePath), cache);
+          return fetchAndStore(fullFileUrl(config, relativePath), targetCaches);
         }, PREFETCH_CONCURRENCY);
 
         writeState(config, 'ready', trigger);
