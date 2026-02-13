@@ -251,21 +251,79 @@
     return overlay;
   }
 
+  function hideOverlay() {
+    var overlay = document.getElementById('sequential-loader-overlay');
+    if (!overlay) return;
+    overlay.style.opacity = '0';
+    setTimeout(function () {
+      if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    }, 300);
+  }
+
+  function mountFullIframe(fullUrl) {
+    var existing = document.getElementById('full-build-iframe');
+    if (existing) {
+      console.log('[SequentialLoader] full iframe already mounted');
+      return;
+    }
+
+    showOverlay('Загружаем полную версию…');
+
+    var iframe = document.createElement('iframe');
+    iframe.id = 'full-build-iframe';
+    iframe.src = fullUrl;
+    iframe.style.position = 'fixed';
+    iframe.style.left = '0';
+    iframe.style.top = '0';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    iframe.style.zIndex = '2147483646';
+    iframe.style.opacity = '0';
+    iframe.style.background = '#000';
+    iframe.style.transition = 'opacity 250ms ease';
+    iframe.allow = 'autoplay; fullscreen; gamepad; xr-spatial-tracking';
+
+    iframe.onload = function () {
+      var liteContainer = document.getElementById('unity-container');
+      if (liteContainer) {
+        liteContainer.style.visibility = 'hidden';
+        liteContainer.style.pointerEvents = 'none';
+      }
+      var liteCanvas = document.getElementById('unity-canvas') || document.querySelector('canvas');
+      if (liteCanvas) {
+        liteCanvas.style.visibility = 'hidden';
+      }
+
+      requestAnimationFrame(function () {
+        iframe.style.opacity = '1';
+      });
+
+      setTimeout(function () {
+        hideOverlay();
+      }, 300);
+    };
+
+    document.body.appendChild(iframe);
+  }
+
   function switchToFull(reason) {
     if (!config) return;
 
-    var target = toAbsolute(config.fullBaseUrl);
+    var target = fullIndexUrl(config);
     var ready = isReadyState(config);
-    console.log('[SequentialLoader] gameover switch, reason =', reason, 'ready =', ready);
+    console.log('[SequentialLoader] gameover switch, reason =', reason, 'ready =', ready, 'mode=iframe');
 
     if (ready) {
-      window.location.replace(target);
+      mountFullIframe(target);
       return;
     }
 
     showOverlay('Подготавливаем полную версию…');
     setTimeout(function () {
-      window.location.replace(target);
+      mountFullIframe(target);
     }, SWITCH_OVERLAY_MS);
   }
 
