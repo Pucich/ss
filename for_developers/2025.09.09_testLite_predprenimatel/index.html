@@ -181,10 +181,19 @@
       // Init TWA
     Telegram.WebApp.ready();
 
-	Telegram.WebApp.lockOrientation();	
+    function safeTgCall(name, fn) {
+      try {
+        if (typeof fn !== 'function') return;
+        fn();
+      } catch (error) {
+        console.log('[Telegram.WebApp] ' + name + ' skipped', error && error.message ? error.message : error);
+      }
+    }
+
+	safeTgCall('lockOrientation', Telegram.WebApp.lockOrientation);
 	
 	//Вопрос подтверждения закрытия
-	Telegram.WebApp.enableClosingConfirmation();
+	safeTgCall('enableClosingConfirmation', Telegram.WebApp.enableClosingConfirmation);
 
 	const initData = Telegram.WebApp.initData;
 	const params = new URLSearchParams(initData);
@@ -204,8 +213,8 @@
 	}
 	window.LogRocket && window.LogRocket.identify(logUser, {});
     
-	Telegram.WebApp.requestFullscreen();
-	Telegram.WebApp.disableVerticalSwipes();
+	safeTgCall('requestFullscreen', Telegram.WebApp.requestFullscreen);
+	safeTgCall('disableVerticalSwipes', Telegram.WebApp.disableVerticalSwipes);
 
 	</script>
   

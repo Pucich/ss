@@ -343,6 +343,50 @@
     }, SWITCH_OVERLAY_MS);
   }
 
+  function extractLevelFromConsoleArgs(argsLike) {
+    try {
+      var text = Array.prototype.map.call(argsLike, function (item) {
+        return typeof item === 'string' ? item : String(item);
+      }).join(' ');
+
+      // Unity logs often contain rich text tags like <color=...>...</color>.
+      text = text.replace(/<[^>]*>/g, ' ');
+
+      var m1 = text.match(/_userSystem\.Level\s*(\d+)/i);
+      if (m1) return Number(m1[1]);
+
+      var m2 = text.match(/Playing\s+cur\s+level\s*(\d+)/i);
+      if (m2) return Number(m2[1]);
+
+      var m3 = text.match(/Level\s*(\d+)\s*ended\s*with\s*win/i);
+      if (m3) return Number(m3[1]);
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function installConsoleLevelBridge() {
+    if (window.__cmpConsoleLevelBridgeInstalled) return;
+    window.__cmpConsoleLevelBridgeInstalled = true;
+
+    var originalLog = console.log;
+    console.log = function () {
+      try {
+        var parsedLevel = extractLevelFromConsoleArgs(arguments);
+        if (parsedLevel && parsedLevel > 0 && typeof window.GameLevelReached === 'function') {
+          window.GameLevelReached(parsedLevel);
+        }
+      } catch (e) {
+        // no-op
+      }
+      return originalLog.apply(console, arguments);
+    };
+
+    console.log('[SequentialLoader] console level bridge installed');
+  }
+
   function installLevelTrigger() {
     var previous = typeof window.GameLevelReached === 'function' ? window.GameLevelReached : null;
 
@@ -429,6 +473,7 @@
     await preparePrefetchPolicy(config);
     installTimerTrigger();
     installLevelTrigger();
+    installConsoleLevelBridge();
     installGameOverTrigger();
   }
 
