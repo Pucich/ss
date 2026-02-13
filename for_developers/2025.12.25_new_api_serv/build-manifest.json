@@ -1,0 +1,30 @@
+{
+  "version": "2025.12.25",
+  "files": [
+    "Build/2025.12.25_new_api_serv.loader.js",
+    "Build/2025.12.25_new_api_serv.framework.js.br",
+    "Build/2025.12.25_new_api_serv.data.br",
+    "Build/2025.12.25_new_api_serv.wasm.br",
+    "TemplateData/favicon.ico",
+    "TemplateData/style.css",
+    "TemplateData/progress-bar-empty-dark.png",
+    "TemplateData/progress-bar-empty-light.png",
+    "TemplateData/progress-bar-full-dark.png",
+    "TemplateData/progress-bar-full-light.png",
+    "TemplateData/unity-logo-dark.png",
+    "TemplateData/unity-logo-light.png",
+    "TemplateData/icons/unity-logo-dark.png",
+    "TemplateData/icons/unity-logo-light.png",
+    "ServiceWorker.js",
+    "manifest.webmanifest",
+    "good_loading.js",
+    "new.css",
+    "loading_bg.jpg"
+  ],
+  "critical": [
+    "Build/2025.12.25_new_api_serv.loader.js",
+    "Build/2025.12.25_new_api_serv.framework.js.br",
+    "Build/2025.12.25_new_api_serv.data.br",
+    "Build/2025.12.25_new_api_serv.wasm.br"
+  ]
+}

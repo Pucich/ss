@@ -34,6 +34,40 @@
     <div id="adsgram-container"></div>
     
     <script>
+      (function () {
+        var fallbackConfig = {
+          fullBaseUrl: '/for_developers/2025.12.25_new_api_serv/',
+          fullVersion: '2025.12.25',
+          manifestPath: 'build-manifest.json',
+          prefetchDelayMs: 10000,
+          manifestTimeoutMs: 12000,
+          prefetchTimeoutMs: 45000,
+          switchOverlayMs: 1200
+        };
+
+        window.SequentialLoaderConfig = Object.assign({}, fallbackConfig);
+
+        fetch('/test_bilds/test1/build-config.json', { cache: 'no-store' })
+          .then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+          })
+          .then(function (cfg) {
+            window.SequentialLoaderConfig = Object.assign({}, fallbackConfig, {
+              fullBaseUrl: cfg && cfg.fullBaseUrl ? cfg.fullBaseUrl : fallbackConfig.fullBaseUrl,
+              fullVersion: cfg && cfg.fullVersion ? cfg.fullVersion : fallbackConfig.fullVersion,
+              manifestPath: cfg && cfg.manifestPath ? cfg.manifestPath : fallbackConfig.manifestPath
+            });
+            console.log('[SequentialLoader] build config loaded');
+          })
+          .catch(function (error) {
+            console.log('[SequentialLoader] build config fallback', error);
+          });
+      })();
+    </script>
+    <script src="/test_bilds/test1/sequential-loader.js"></script>
+
+    <script>
       // Universal ad container management
       window.AdContainerManager = {
         clearContainer: function() {
