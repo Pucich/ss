@@ -11,12 +11,15 @@
   var PREFETCH_DELAY_MS = 10000;
   var SWITCH_OVERLAY_MS = 1200;
   var PREFETCH_CONCURRENCY = 2;
+  var TARGET_SWITCH_LEVEL = 6;
   var READY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   var CACHE_PREFIX = 'cmp-full-prefetch:';
 
   var config = null;
   var prefetchPromise = null;
   var prefetchStarted = false;
+  var highestReachedLevel = 0;
+  var levelHookObserved = false;
   var timerId = null;
 
   function normalizeBaseUrl(url) {
@@ -30,7 +33,8 @@
       liteBaseUrl: normalizeBaseUrl(baseConfig.liteBaseUrl || DEFAULT_CONFIG.liteBaseUrl),
       fullBaseUrl: normalizeBaseUrl(seqCfg.fullBaseUrl || baseConfig.fullBaseUrl || DEFAULT_CONFIG.fullBaseUrl),
       fullVersion: seqCfg.fullVersion || baseConfig.fullVersion || DEFAULT_CONFIG.fullVersion,
-      manifestPath: seqCfg.manifestPath || baseConfig.manifestPath || DEFAULT_CONFIG.manifestPath
+      manifestPath: seqCfg.manifestPath || baseConfig.manifestPath || DEFAULT_CONFIG.manifestPath,
+      targetSwitchLevel: Number(seqCfg.targetSwitchLevel || baseConfig.targetSwitchLevel || TARGET_SWITCH_LEVEL)
     };
 
     return merged;
@@ -138,7 +142,14 @@
   }
 
   async function fetchAndStore(url, cache) {
-    var response = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+    if (cache) {
+      var existing = await cache.match(url);
+      if (existing) {
+        return;
+      }
+    }
+
+    var response = await fetch(url, { credentials: 'same-origin' });
     if (!response.ok) {
       throw new Error('HTTP ' + response.status + ' for ' + url);
     }
@@ -201,7 +212,7 @@
         await fetchAndStore(indexUrl, cache);
 
         var manifestUrl = fullManifestUrl(config);
-        var manifestResponse = await fetch(manifestUrl, { cache: 'no-store', credentials: 'same-origin' });
+        var manifestResponse = await fetch(manifestUrl, { credentials: 'same-origin' });
         if (!manifestResponse.ok) {
           throw new Error('HTTP ' + manifestResponse.status + ' for manifest');
         }
@@ -312,6 +323,11 @@
   function switchToFull(reason) {
     if (!config) return;
 
+    if (highestReachedLevel < config.targetSwitchLevel) {
+      console.log('[SequentialLoader] handoff blocked: level gate not reached', highestReachedLevel, '<', config.targetSwitchLevel);
+      return;
+    }
+
     var target = fullIndexUrl(config);
     var ready = isReadyState(config);
     console.log('[SequentialLoader] gameover switch, reason =', reason, 'ready =', ready, 'mode=iframe');
@@ -328,7 +344,30 @@
   }
 
   function installLevelTrigger() {
-    console.log('[SequentialLoader] level hook not found');
+    var previous = typeof window.GameLevelReached === 'function' ? window.GameLevelReached : null;
+
+    window.GameLevelReached = function (level) {
+      var normalized = Number(level);
+      if (!Number.isFinite(normalized)) {
+        normalized = 0;
+      }
+
+      levelHookObserved = true;
+      if (normalized > highestReachedLevel) {
+        highestReachedLevel = normalized;
+      }
+
+      console.log('[SequentialLoader] level reached', normalized, 'highest =', highestReachedLevel);
+
+      if (normalized >= 2 && !prefetchStarted) {
+        console.log('[SequentialLoader] level trigger prefetch (>=2)');
+        startPrefetch('level>=2');
+      }
+
+      if (previous) {
+        return previous.apply(this, arguments);
+      }
+    };
   }
 
   function installGameOverTrigger() {
@@ -360,6 +399,12 @@
   }
 
   function installTimerTrigger() {
+    setTimeout(function () {
+      if (!levelHookObserved) {
+        console.log('[SequentialLoader] level hook not found');
+      }
+    }, 12000);
+
     console.log('[SequentialLoader] timer prefetch scheduled for 10s');
     timerId = setTimeout(function () {
       console.log('[SequentialLoader] timer trigger prefetch');
