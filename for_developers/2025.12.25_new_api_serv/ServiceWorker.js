@@ -11,7 +11,7 @@ const heavyBuildAssets = [
 ];
 
 function toAbsolute(path) {
-  return new URL(path, self.location.origin).toString();
+  return new URL(path, self.registration.scope).toString();
 }
 
 async function matchByRequestOrUrl(cache, requestOrUrl) {
@@ -37,18 +37,14 @@ self.addEventListener('install', function (e) {
         continue;
       }
 
-      const prefetchHit = await matchPrefetchCache(absoluteUrl);
+      const prefetchHit = await matchPrefetchCache(absoluteUrl) || await matchPrefetchByFilename(relativePath);
       if (prefetchHit) {
         console.log('[Service Worker] install-hit-prefetch', absoluteUrl);
         await runtimeCache.put(absoluteUrl, prefetchHit.clone());
         continue;
       }
 
-      console.log('[Service Worker] install-network', absoluteUrl);
-      const networkResponse = await fetch(absoluteUrl, { credentials: 'same-origin' });
-      if (networkResponse.ok) {
-        await runtimeCache.put(absoluteUrl, networkResponse.clone());
-      }
+      console.log('[Service Worker] install-deferred-miss', absoluteUrl);
     }
 
     await self.skipWaiting();
@@ -58,6 +54,28 @@ self.addEventListener('install', function (e) {
 self.addEventListener('activate', function (e) {
   e.waitUntil(self.clients.claim());
 });
+
+
+async function matchPrefetchByFilename(relativePath) {
+  const fileName = String(relativePath).split('/').pop();
+  if (!fileName) return null;
+
+  const keys = await caches.keys();
+  for (const key of keys) {
+    if (!key.startsWith(prefetchCachePrefix)) continue;
+    const cache = await caches.open(key);
+    const requests = await cache.keys();
+    for (const req of requests) {
+      if (!req || !req.url || !req.url.endsWith('/' + fileName)) continue;
+      const hit = await cache.match(req);
+      if (hit) {
+        console.log(`[Service Worker] Prefetch filename hit: ${fileName} from ${key}`);
+        return hit;
+      }
+    }
+  }
+  return null;
+}
 
 async function matchPrefetchCache(requestOrUrl) {
   const request = typeof requestOrUrl === 'string' ? new Request(requestOrUrl) : requestOrUrl;

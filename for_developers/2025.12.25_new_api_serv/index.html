@@ -94,13 +94,14 @@
       var buildUrl = "Build";
       const nativeFetch = window.fetch.bind(window);
       const runtimeCacheName = "NGames-cblocks1-webgl_opt_online_high";
+      const currentScopePath = new URL(".", window.location.href).pathname;
 
       function isFullAssetRequest(url) {
         var path = url.pathname;
         return (
-          (path.includes("/for_developers/") && path.includes("/Build/")) ||
-          path.endsWith("/build-manifest.json") ||
-          path.includes("/TemplateData/")
+          path.startsWith(currentScopePath + "Build/") ||
+          path === (currentScopePath + "build-manifest.json") ||
+          path.startsWith(currentScopePath + "TemplateData/")
         );
       }
 
@@ -124,7 +125,9 @@
           return nativeFetch(input, init);
         }
 
-        console.log("cache-key", request.url, toAbsoluteUrl(request.url));
+        if (/\.(data\.br|wasm\.br|framework\.js\.br)$/.test(requestUrl.pathname)) {
+          console.log("cache-key", request.url, toAbsoluteUrl(request.url));
+        }
         var runtimeCache = await caches.open(runtimeCacheName);
         var cachedResponse = await matchCacheByRequestOrUrl(runtimeCache, request);
         if (!cachedResponse) {
