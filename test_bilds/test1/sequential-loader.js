@@ -23,6 +23,9 @@
   var highestReachedLevel = 0;
   var levelHookObserved = false;
   var timerId = null;
+  var overlayProgressTimer = null;
+  var overlayProgressValue = 12;
+  var overlayProgressDirection = 1;
 
   function normalizeBaseUrl(url) {
     if (!url) return '/';
@@ -267,31 +270,76 @@
     return prefetchPromise;
   }
 
-  function showOverlay(text) {
+  function startOverlayProgressAnimation(progressBar) {
+    if (!progressBar) return;
+    if (overlayProgressTimer) return;
+
+    overlayProgressTimer = setInterval(function () {
+      overlayProgressValue += overlayProgressDirection * 1.2;
+      if (overlayProgressValue >= 92) {
+        overlayProgressValue = 92;
+        overlayProgressDirection = -1;
+      } else if (overlayProgressValue <= 12) {
+        overlayProgressValue = 12;
+        overlayProgressDirection = 1;
+      }
+      progressBar.style.width = overlayProgressValue.toFixed(1) + '%';
+    }, 60);
+  }
+
+  function stopOverlayProgressAnimation() {
+    if (overlayProgressTimer) {
+      clearInterval(overlayProgressTimer);
+      overlayProgressTimer = null;
+    }
+  }
+
+  function showOverlay() {
     var overlay = document.getElementById('sequential-loader-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'sequential-loader-overlay';
       overlay.style.position = 'fixed';
       overlay.style.inset = '0';
-      overlay.style.display = 'flex';
-      overlay.style.alignItems = 'center';
-      overlay.style.justifyContent = 'center';
+      overlay.style.display = 'block';
       overlay.style.background = '#0d0f16 url(/for_developers/2025.09.09_testLite_predprenimatel/loading_bg.jpg) center / cover no-repeat';
-      overlay.style.color = '#fff';
-      overlay.style.font = '600 18px/1.4 Arial, sans-serif';
       overlay.style.zIndex = '2147483647';
-      overlay.style.textAlign = 'center';
-      overlay.style.padding = '24px';
+      overlay.style.transition = 'opacity 250ms ease';
+
+      var progressEmpty = document.createElement('div');
+      progressEmpty.id = 'sequential-loader-progress-empty';
+      progressEmpty.style.position = 'absolute';
+      progressEmpty.style.left = '50%';
+      progressEmpty.style.bottom = '10%';
+      progressEmpty.style.width = '70%';
+      progressEmpty.style.height = '28px';
+      progressEmpty.style.transform = 'translate(-50%, 0)';
+      progressEmpty.style.borderRadius = '47px';
+      progressEmpty.style.backgroundColor = 'hsla(0, 0%, 100%, .84)';
+      progressEmpty.style.boxShadow = '0 4px 6px 0 #fff inset, 0 4px 13.8px 0 rgba(0, 0, 0, .25)';
+
+      var progressFull = document.createElement('div');
+      progressFull.id = 'sequential-loader-progress-full';
+      progressFull.style.height = '100%';
+      progressFull.style.width = overlayProgressValue.toFixed(1) + '%';
+      progressFull.style.borderRadius = '47px';
+      progressFull.style.backgroundColor = '#0f1dad';
+
+      progressEmpty.appendChild(progressFull);
+      overlay.appendChild(progressEmpty);
       document.body.appendChild(overlay);
     }
-    overlay.textContent = text || 'Подготавливаем полную версию…';
+
+    var progressBar = document.getElementById('sequential-loader-progress-full');
+    startOverlayProgressAnimation(progressBar);
+
     return overlay;
   }
 
   function hideOverlay() {
     var overlay = document.getElementById('sequential-loader-overlay');
     if (!overlay) return;
+    stopOverlayProgressAnimation();
     overlay.style.opacity = '0';
     setTimeout(function () {
       if (overlay && overlay.parentNode) {
@@ -307,7 +355,7 @@
       return;
     }
 
-    showOverlay('Загружаем полную версию…');
+    showOverlay();
 
     var iframe = document.createElement('iframe');
     iframe.id = 'full-build-iframe';
@@ -385,7 +433,7 @@
       return;
     }
 
-    showOverlay('Подготавливаем полную версию…');
+    showOverlay();
     setTimeout(function () {
       mountFullIframe(target);
     }, SWITCH_OVERLAY_MS);
